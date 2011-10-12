@@ -252,7 +252,7 @@ void LexoanimMainWindow::loadModel(QString fileName, bool resetViewSettings )
    if( !fileName.isEmpty() ) {
 
       osg::ref_ptr< LexolightsDocument > newDocument = new LexolightsDocument;
-      if( /*newDocument->openFile( fileName )*/ true)
+      if( newDocument->openFile( fileName ) )
       {
          // set new active document
          // and re-connect document's sceneChanged signal
@@ -282,21 +282,21 @@ void LexoanimMainWindow::loadModel(QString fileName, bool resetViewSettings )
          /*dtCore::RefPtr<dtCore::Object> sceneObject = new dtCore::Object("Model");
          sceneObject->LoadFile(fileName.toStdString());
          getDeltaApp()->AddDrawable(sceneObject);*/
-         /*DeltaSceneGroup->addChild(actionPPL->isChecked() ?
+         DeltaSceneGroup->addChild(actionPPL->isChecked() ?
                                                 newDocument->getPPLScene() :
-                                                newDocument->getOriginalScene());*/
+                                                newDocument->getOriginalScene());
          //DeltaSceneGroup->addChild(newDocument->getOriginalScene());
-         DeltaSceneGroup = NULL;
+         //DeltaSceneGroup = NULL;
 
-         dtCore::RefPtr<dtCore::Object> obj = new dtCore::Object();
-         obj->LoadFile(fileName.toStdString());
+         //dtCore::RefPtr<dtCore::Object> obj = new dtCore::Object();
+         //obj->LoadFile(fileName.toStdString());
 
          //ref_ptr<osg::Node> sc = newDocument->getOriginalScene();
-         ref_ptr<osg::Node> sc = obj->GetOSGNode();
+         //ref_ptr<osg::Node> sc = obj->GetOSGNode();
          ref_ptr<osgShadow::ShadowedScene> shads = new osgShadow::ShadowedScene;
          ref_ptr<osgShadow::ShadowVolume> sv = new osgShadow::ShadowVolume();
          FindLightVisitor flv;
-         sc->accept(flv);
+         DeltaSceneGroup->accept(flv);
          sv->setMethod( osgShadow::ShadowVolumeGeometryGenerator::ZFAIL );
          //sv->setMode(osgShadow::ShadowVolumeGeometryGenerator::CPU_SILHOUETTE);
          sv->setStencilImplementation( osgShadow::ShadowVolume::STENCIL_TWO_SIDED );
@@ -304,7 +304,7 @@ void LexoanimMainWindow::loadModel(QString fileName, bool resetViewSettings )
          sv->setUpdateStrategy( osgShadow::ShadowVolume::MANUAL_INVALIDATE );
          sv->setLight(flv.getLight());
          shads->setShadowTechnique( sv );
-         shads->addChild(sc);
+         shads->addChild(DeltaSceneGroup);
          //getDeltaApp()->GetScene()->SetSceneNode(DeltaSceneGroup);
          getDeltaApp()->GetScene()->SetSceneNode(shads);
          LexoanimApp *lexoAnimApp = dynamic_cast<LexoanimApp *> (getDeltaApp());
