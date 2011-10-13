@@ -123,7 +123,7 @@ static const std::string volumeGeometryShader(
 ShadowVolume::ShadowVolume():
    //_occluders_dirty(true),
 ShadowTechnique(),
-   _megaTheFuckDontCallMeAgain(true),
+_initialized(false),
 _mode(ShadowVolumeGeometryGenerator::CPU_RAW),
 _exts(0),
 _stencilImplementation(STENCIL_AUTO),
@@ -163,8 +163,20 @@ void ShadowVolume::setLight( Light* light )
 
 void ShadowVolume::init()
 {
-   if(!_dirty || !_megaTheFuckDontCallMeAgain) return;
-   _megaTheFuckDontCallMeAgain = false;
+    /**
+     * This var has currently no effect on whether to perform init or don't.
+     * It is set from various location as ShadowedScene::setShadowTechnique
+     * which I deem wrong. So I have _initialized var to ensure, that this
+     * function is executed only once or, in future, when someone knows
+     * exactly what he does - Currently not supported.
+     */
+    _dirty = false;
+
+   if(_initialized) return;
+   
+   _initialized = true;
+
+      
 
    _clearDrawable->setUseDisplayList( false );
    _clearDrawable->getOrCreateStateSet()->setRenderBinDetails( 1, "RenderBin" );
@@ -399,12 +411,6 @@ void ShadowVolume::init()
     stencil4->setOperation( Stencil::KEEP, Stencil::KEEP, Stencil::KEEP );
     _ss4->setAttributeAndModes( stencil4, StateAttribute::ON );
     
-    /* 
-     * Very important. Otherwise the ShadowTechnique::Traverse
-     * will call init on every frame. The shaders files must be freed
-     * at the end of program. Which currently isn't possible. 
-     */
-    _dirty = false;
 }
 
 

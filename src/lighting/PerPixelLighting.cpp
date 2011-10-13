@@ -252,7 +252,7 @@ void PerPixelLighting::convert( Node *scene, ShadowTechnique shadowTechnique )
                      sv->disableAmbientPass( true ); // we already created ambient pass
                      if( passNum <=2 )
                         sv->setClearStencil( false ); // stencil is cleared on the beginning of the frame
-                     sv->setMethod( osgShadow::ShadowVolumeGeometryGenerator::ZPASS );
+                     sv->setMethod( osgShadow::ShadowVolumeGeometryGenerator::ZFAIL );
                      //sv->setMode(osgShadow::ShadowVolumeGeometryGenerator::CPU_SILHOUETTE);
                      sv->setStencilImplementation( osgShadow::ShadowVolume::STENCIL_TWO_SIDED );
                      sv->setShadowCastingFace( osgShadow::ShadowVolumeGeometryGenerator::BACK );

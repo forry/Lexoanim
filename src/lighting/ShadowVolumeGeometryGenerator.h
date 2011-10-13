@@ -229,6 +229,12 @@ protected:
     */
    virtual bool isLightPointSilhouetteEdge(const osg::Vec4& lightpos, const Edge& edge) const;
 
+   /**
+    * Computes a point in infinity projected from light. Used for both
+    * positional and directional lights.
+    */
+   static Vec4 projectToInf(Vec4 point, Vec4 light);
+
     bool                     _dirty;
     MatrixStack              _matrixStack;
     ModeStack                _blendModeStack;

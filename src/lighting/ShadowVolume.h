@@ -121,7 +121,7 @@ protected:
     bool                                   _clearStencil;
     UpdateStrategy                         _updateStrategy;
 
-    bool _megaTheFuckDontCallMeAgain;
+    bool _initialized;
 
     ///SV geometry generator - for creating it only once
     ShadowVolumeGeometryGenerator _svgg;

@@ -293,20 +293,21 @@ void LexoanimMainWindow::loadModel(QString fileName, bool resetViewSettings )
 
          //ref_ptr<osg::Node> sc = newDocument->getOriginalScene();
          //ref_ptr<osg::Node> sc = obj->GetOSGNode();
-         ref_ptr<osgShadow::ShadowedScene> shads = new osgShadow::ShadowedScene;
-         ref_ptr<osgShadow::ShadowVolume> sv = new osgShadow::ShadowVolume();
-         FindLightVisitor flv;
-         DeltaSceneGroup->accept(flv);
-         sv->setMethod( osgShadow::ShadowVolumeGeometryGenerator::ZFAIL );
+         //ref_ptr<osgShadow::ShadowedScene> shads = new osgShadow::ShadowedScene;
+         //ref_ptr<osgShadow::ShadowVolume> sv = new osgShadow::ShadowVolume();
+         //FindLightVisitor flv;
+         //DeltaSceneGroup->accept(flv);
+         //sv->setMethod( osgShadow::ShadowVolumeGeometryGenerator::ZFAIL );
          //sv->setMode(osgShadow::ShadowVolumeGeometryGenerator::CPU_SILHOUETTE);
-         sv->setStencilImplementation( osgShadow::ShadowVolume::STENCIL_TWO_SIDED );
-         sv->setShadowCastingFace( osgShadow::ShadowVolumeGeometryGenerator::BACK );
-         sv->setUpdateStrategy( osgShadow::ShadowVolume::MANUAL_INVALIDATE );
-         sv->setLight(flv.getLight());
-         shads->setShadowTechnique( sv );
-         shads->addChild(DeltaSceneGroup);
+         //sv->setStencilImplementation( osgShadow::ShadowVolume::STENCIL_TWO_SIDED );
+         //sv->setShadowCastingFace( osgShadow::ShadowVolumeGeometryGenerator::BACK );
+         //sv->setUpdateStrategy( osgShadow::ShadowVolume::MANUAL_INVALIDATE );
+         //sv->setLight(flv.getLight());
+         //shads->setShadowTechnique( sv );
+         //shads->addChild(DeltaSceneGroup);
          //getDeltaApp()->GetScene()->SetSceneNode(DeltaSceneGroup);
-         getDeltaApp()->GetScene()->SetSceneNode(shads);
+         //getDeltaApp()->GetScene()->SetSceneNode(shads);
+
          LexoanimApp *lexoAnimApp = dynamic_cast<LexoanimApp *> (getDeltaApp());
          if(lexoAnimApp)
          {

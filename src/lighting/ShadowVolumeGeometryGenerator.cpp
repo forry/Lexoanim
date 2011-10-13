@@ -64,12 +64,9 @@ struct ShadowVolumeGeometryGenerator::TriangleOnlyCollector
             _caps_col->push_back(Vec4(1.0,0.0,0.0,1.0));
 
             /* dark caps (lame) */
-            Vec4 t0inf = t1 - _lightPos;
-            t0inf._v[3] = 0.0f;
-            Vec4 t1inf = t2 - _lightPos;
-            t1inf._v[3] = 0.0f;
-            Vec4 t2inf = t3 - _lightPos;
-            t2inf._v[3] = 0.0f;
+            Vec4 t0inf = projectToInf(t1, _lightPos);
+            Vec4 t1inf = projectToInf(t2, _lightPos);
+            Vec4 t2inf = projectToInf(t3, _lightPos);
 
             _caps_vert->push_back(t0inf);
             _caps_vert->push_back(t2inf);
@@ -281,12 +278,9 @@ ref_ptr<Geometry> ShadowVolumeGeometryGenerator::createGeometry()
          Vec4 v2( *it++);
 
 
-         Vec4 v0inf = v0 - _lightPos;
-         v0inf._v[3] = 0.0f;
-         Vec4 v1inf = v1 - _lightPos;
-         v1inf._v[3] = 0.0f;
-         Vec4 v2inf = v2 - _lightPos;
-         v2inf._v[3] = 0.0f;
+         Vec4 v0inf = projectToInf(v0, _lightPos);
+         Vec4 v1inf = projectToInf(v1, _lightPos);
+         Vec4 v2inf = projectToInf(v2, _lightPos);
 
          /*_edge_vert->push_back(v0);
          _edge_vert->push_back(v1);
@@ -427,10 +421,8 @@ ref_ptr<Geometry> ShadowVolumeGeometryGenerator::createGeometry()
 
          Vec4 v0( (*_coords)[*it++]);
          Vec4 v1( (*_coords)[*it++]);
-         Vec4 v0inf = v0 - _lightPos;
-         v0inf._v[3] = 0.0f;
-         Vec4 v1inf = v1 - _lightPos;
-         v1inf._v[3] = 0.0f;
+         Vec4 v0inf = projectToInf(v0, _lightPos);
+         Vec4 v1inf = projectToInf(v1, _lightPos);
 
          /*_edge_vert->push_back(v0);
          _edge_vert->push_back(v1);
@@ -894,7 +886,8 @@ void ShadowVolumeGeometryGenerator::buildEdgeMap(UIntList &indexMap){
             if (!it->addTriangle(triNo)) ++numTriangleErrors;
       }
    }
-   //notify(NOTICE)<<"edgeset size: "<<_edgeSet.size()<<std::endl;
+   if(numTriangleErrors > 0)
+      notify(WARN)<<"Number of bad triangles: "<<numTriangleErrors<<std::endl;
 
    unsigned int numEdgesWithNoTriangles = 0;
    unsigned int numEdgesWithOneTriangles = 0;
@@ -1025,4 +1018,11 @@ bool ShadowVolumeGeometryGenerator::isLightPointSilhouetteEdge(const osg::Vec4& 
    if (n1==0.0f && n2==0.0f) return false;
       
    return n1*n2 <= 0.0f; 
+}
+
+Vec4 ShadowVolumeGeometryGenerator::projectToInf(Vec4 point, Vec4 light)
+{
+   Vec4 res;
+   res = point * light.w() - light;
+   return res;
 }
