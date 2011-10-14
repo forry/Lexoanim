@@ -180,7 +180,7 @@ void PerPixelLighting::convert( Node *scene, ShadowTechnique shadowTechnique )
       mp.globalAmbient = true;
 
       // perform conversion with no lights activated
-      scene->accept( *convertVisitor );
+      //scene->accept( *convertVisitor );
       ambientScene = convertVisitor->getScene();
    }
 
@@ -252,8 +252,8 @@ void PerPixelLighting::convert( Node *scene, ShadowTechnique shadowTechnique )
                      sv->disableAmbientPass( true ); // we already created ambient pass
                      if( passNum <=2 )
                         sv->setClearStencil( false ); // stencil is cleared on the beginning of the frame
-                     sv->setMethod( osgShadow::ShadowVolumeGeometryGenerator::ZFAIL );
-                     //sv->setMode(osgShadow::ShadowVolumeGeometryGenerator::CPU_SILHOUETTE);
+                     sv->setMethod( osgShadow::ShadowVolumeGeometryGenerator::ZPASS );
+                     sv->setMode(osgShadow::ShadowVolumeGeometryGenerator::SILHOUETTES_ONLY);
                      sv->setStencilImplementation( osgShadow::ShadowVolume::STENCIL_TWO_SIDED );
                      sv->setShadowCastingFace( osgShadow::ShadowVolumeGeometryGenerator::BACK );
                      sv->setUpdateStrategy( osgShadow::ShadowVolume::MANUAL_INVALIDATE );

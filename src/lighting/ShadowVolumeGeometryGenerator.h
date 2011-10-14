@@ -57,7 +57,8 @@ public:
       CPU_SILHOUETTE       = 2, // CPU computes silhouette and then extrude shadow volume
       GPU_RAW              = 3, // GPU extrude shadow volume from each triangle using geometry shader
       GPU_SILHOUETTE       = 4, // GPU computes silhouette and then extrude shadow volume using adjacency information
-      CPU_FIND_GPU_EXTRUDE = 5  // CPU finds a silhouette but GPU extrude shadow volume using geometry shader
+      CPU_FIND_GPU_EXTRUDE = 5, // CPU finds a silhouette but GPU extrude shadow volume using geometry shader
+      SILHOUETTES_ONLY     = 6
    };
 
    enum Methods{
@@ -228,6 +229,13 @@ protected:
     * Decide whether is the edge silhouet of given point light.
     */
    virtual bool isLightPointSilhouetteEdge(const osg::Vec4& lightpos, const Edge& edge) const;
+
+   /**
+    * Decide whether is the edge silhouet of given directional light.
+    */
+   virtual bool isLightDirectSilhouetteEdge(const osg::Vec4& lightpos, const Edge& edge) const;
+
+   virtual bool isLightSilhouetteEdge(const osg::Vec4& lightpos, const Edge& edge) const;
 
    /**
     * Computes a point in infinity projected from light. Used for both

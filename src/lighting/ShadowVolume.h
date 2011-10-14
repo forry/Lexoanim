@@ -112,6 +112,7 @@ protected:
     osg::ref_ptr< osg::StateSet > _ss3_caps;
     osg::ref_ptr< osg::StateSet > _ss23_caps;
     osg::ref_ptr< osg::StateSet > _ss4;
+    osg::ref_ptr< osg::StateSet > _ssd;
 
     ///modes of SV computing
     ShadowVolumeGeometryGenerator::Modes   _mode;

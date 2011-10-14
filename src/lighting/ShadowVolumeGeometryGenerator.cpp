@@ -16,12 +16,9 @@ struct ShadowVolumeGeometryGenerator::TriangleOnlyCollector
 
    static inline Vec3 toVec3( const Vec4& v4)
    {
-      if( v4[3] == 1. )
+      if( v4[3] == 1. || v4[3] == 0)
             return Vec3( v4[0], v4[1], v4[2] );
 
-      if(v4[3] == 0){
-         notify(WARN)<<"TriangleOnlyCollector.toVec3(): fourth component equal to 0 - will result in INF"<<std::endl;
-      }
       Vec4::value_type n = 1. / v4[3];
       return Vec3( v4[0]*n, v4[1]*n, v4[2]*n );
    }
@@ -43,7 +40,7 @@ struct ShadowVolumeGeometryGenerator::TriangleOnlyCollector
          Vec3 n = (v2-v1) ^ (v3-v1);          // normal of the face
          Vec3 lp3 = toVec3( _lightPos );       // lightpos converted to Vec3
          //notify(NOTICE)<<"Lightpos "<<lp3.x()<<" "<<lp3.y()<<" "<<lp3.z()<<" "<<std::endl;
-         bool front = ( n * ( lp3-v1 ) ) >= 0; // dot product
+         bool front = ( n * ( lp3-v1 * _lightPos.w() ) ) >= 0; // dot product
          if(_mode == ShadowVolumeGeometryGenerator::CPU_RAW && !front){
             Vec3 tmp = v1;
             v1 = v2;
@@ -524,6 +521,28 @@ ref_ptr<Geometry> ShadowVolumeGeometryGenerator::createGeometry()
       _caps_geo->setColorBinding(Geometry::BIND_PER_VERTEX);
       _caps_geo->addPrimitiveSet( new DrawArrays( PrimitiveSet::TRIANGLES, 0, _caps_vert->size()));
    }
+   else if(_mode == SILHOUETTES_ONLY){
+      removeDuplicateVertices(_triangleIndices);
+      computeNormals();
+      buildEdgeMap(_triangleIndices);
+      computeSilhouette();
+
+      for(UIntList::iterator it = _silhouetteIndices.begin(); it != _silhouetteIndices.end(); ){
+
+         Vec4 v0( (*_coords)[*it++]);
+         Vec4 v1( (*_coords)[*it++]);
+         
+         /* all points should be in correct order now so let's construct the side of volume */
+         _edge_vert->push_back(v1);
+         _edge_vert->push_back(v0);
+         _edge_col->push_back(Vec4(1.0,0.0,0.0,1.0));
+         _edge_col->push_back(Vec4(0.0,1.0,0.0,1.0));
+      }
+      _edges_geo->setVertexArray(_edge_vert);
+      _edges_geo->setColorArray(_edge_col);
+      _edges_geo->setColorBinding(Geometry::BIND_PER_VERTEX);
+      _edges_geo->addPrimitiveSet( new DrawArrays( PrimitiveSet::LINES, 0, _edge_vert->size()));
+   }
    else if(_mode == GPU_RAW){
       _edges_geo->setVertexArray(_coords);
       //notify(NOTICE)<<"SIZE: "<<_coords->size()<<std::endl;
@@ -796,7 +815,7 @@ void ShadowVolumeGeometryGenerator::computeNormals()
    unsigned int redundentIndices = _triangleIndices.size() - numTriangles * 3;
    if (redundentIndices)
    {
-      osg::notify(osg::NOTICE)<<"Warning OccluderGeometry::computeNormals() has found redundent trailing indices"<<std::endl;
+      osg::notify(osg::NOTICE)<<"Warning OccluderGeometry::computeNormals() has found redundant trailing indices"<<std::endl;
       _triangleIndices.erase(_triangleIndices.begin() + numTriangles * 3, _triangleIndices.end());
    }
        
@@ -978,13 +997,13 @@ void ShadowVolumeGeometryGenerator::computeSilhouette(){
          ++eitr)
       {
          const Edge& edge = *eitr;
-         if (isLightPointSilhouetteEdge(_lightPos,edge))
+         if (isLightSilhouetteEdge(_lightPos,edge))
          {
              
-            Vec3 v1; v1.set((*_coords)[edge._p1].x(), (*_coords)[edge._p1].y(), (*_coords)[edge._p1].z());     
-            Vec3 v2; v2.set((*_coords)[edge._p2].x(), (*_coords)[edge._p2].y(), (*_coords)[edge._p2].z());
-            Vec3 lightpos; lightpos.set(_lightPos.x(), _lightPos.y(), _lightPos.z());
-            osg::Vec3 normal = (v2-v1) ^ (v1-lightpos);
+            Vec3 v1 = TriangleOnlyCollector::toVec3((*_coords)[edge._p1]); //v1.set((*_coords)[edge._p1].x(), (*_coords)[edge._p1].y(), (*_coords)[edge._p1].z());     
+            Vec3 v2 = TriangleOnlyCollector::toVec3((*_coords)[edge._p2]); //v2.set((*_coords)[edge._p2].x(), (*_coords)[edge._p2].y(), (*_coords)[edge._p2].z());
+            Vec3 lightpos = TriangleOnlyCollector::toVec3(_lightPos); //lightpos.set(_lightPos.x(), _lightPos.y(), _lightPos.z());
+            osg::Vec3 normal = (v2-v1) ^ (v1 * _lightPos.w() - lightpos);
             if (normal * edge._normal > 0.0)
             {        
                   _silhouetteIndices.push_back(edge._p1);
@@ -1001,6 +1020,24 @@ void ShadowVolumeGeometryGenerator::computeSilhouette(){
       //notify(NOTICE)<<"~~END"<<std::endl;
 }
 
+
+bool ShadowVolumeGeometryGenerator::isLightSilhouetteEdge(const osg::Vec4& lightpos, const Edge& edge) const
+{
+   if (edge.boundaryEdge()) return true;
+      
+      
+   osg::Vec4 delta(lightpos.x(),lightpos.y(),lightpos.z(),1.0);
+   delta = (lightpos - (*_coords)[edge._p1] * lightpos.w());
+   osg::Vec3 tolight = TriangleOnlyCollector::toVec3(delta);
+      
+   float n1 = tolight * _triangleNormals[edge._t1];
+   float n2 = tolight * _triangleNormals[edge._t2];
+
+   if (n1==0.0f && n2==0.0f) return false;
+      
+   return n1*n2 <= 0.0f; 
+}
+
 bool ShadowVolumeGeometryGenerator::isLightPointSilhouetteEdge(const osg::Vec4& lightpos, const Edge& edge) const
 {
    if (edge.boundaryEdge()) return true;
@@ -1014,6 +1051,21 @@ bool ShadowVolumeGeometryGenerator::isLightPointSilhouetteEdge(const osg::Vec4& 
       
    float n1 = delta * _triangleNormals[edge._t1] + offset;
    float n2 = delta * _triangleNormals[edge._t2] + offset;
+
+   if (n1==0.0f && n2==0.0f) return false;
+      
+   return n1*n2 <= 0.0f; 
+}
+
+bool ShadowVolumeGeometryGenerator::isLightDirectSilhouetteEdge(const osg::Vec4& lightpos, const Edge& edge) const
+{
+   if (edge.boundaryEdge()) return true;
+    
+      
+   osg::Vec4 delta(lightpos.x(),lightpos.y(),lightpos.z(),1.0);
+      
+   float n1 = delta * _triangleNormals[edge._t1];
+   float n2 = delta * _triangleNormals[edge._t2];
 
    if (n1==0.0f && n2==0.0f) return false;
       

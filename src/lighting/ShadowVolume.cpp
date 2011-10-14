@@ -248,7 +248,7 @@ void ShadowVolume::init()
 
     // do not write to color buffers
     ColorMask *colorMask23 = new ColorMask;
-    colorMask23->setMask( false, false, false, false );
+    //colorMask23->setMask( false, false, false, false );
     _ss2->setAttribute( colorMask23 );
     _ss3->setAttribute( colorMask23 );
 
@@ -410,6 +410,10 @@ void ShadowVolume::init()
     stencil4->setFunction( Stencil::EQUAL, 0, ~0u );
     stencil4->setOperation( Stencil::KEEP, Stencil::KEEP, Stencil::KEEP );
     _ss4->setAttributeAndModes( stencil4, StateAttribute::ON );
+
+    //debuging stateset
+    _ssd = new StateSet();
+    _ss4->setMode( GL_LIGHTING, StateAttribute::OFF | StateAttribute::OVERRIDE );
     
 }
 
@@ -474,6 +478,17 @@ void ShadowVolume::cull( osgUtil::CullVisitor& cv )
           //_svgg.clearGeometry();
           _svgg.setup(lightPos);
           _shadowedScene->Group::traverse( _svgg );
+   }
+
+   if(_mode == ShadowVolumeGeometryGenerator::SILHOUETTES_ONLY){
+      cv.pushStateSet(_ssd);
+      ref_ptr< Drawable > d = _svgg.createGeometry();
+      d->setUseDisplayList( false );
+      ref_ptr< Geode > geode = new Geode;
+      geode->addDrawable( d );
+      geode->accept( cv );
+      cv.popStateSet();
+      return;
    }
 
    bool twoSidedStencil = _stencilImplementation == STENCIL_TWO_SIDED;
