@@ -248,7 +248,7 @@ void ShadowVolume::init()
 
     // do not write to color buffers
     ColorMask *colorMask23 = new ColorMask;
-    //colorMask23->setMask( false, false, false, false );
+    colorMask23->setMask( false, false, false, false );
     _ss2->setAttribute( colorMask23 );
     _ss3->setAttribute( colorMask23 );
 
@@ -413,7 +413,7 @@ void ShadowVolume::init()
 
     //debuging stateset
     _ssd = new StateSet();
-    _ss4->setMode( GL_LIGHTING, StateAttribute::OFF | StateAttribute::OVERRIDE );
+    _ssd->setMode( GL_LIGHTING, StateAttribute::OFF | StateAttribute::OVERRIDE );
     
 }
 

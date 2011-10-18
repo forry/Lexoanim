@@ -40,14 +40,14 @@ struct ShadowVolumeGeometryGenerator::TriangleOnlyCollector
          Vec3 n = (v2-v1) ^ (v3-v1);          // normal of the face
          Vec3 lp3 = toVec3( _lightPos );       // lightpos converted to Vec3
          //notify(NOTICE)<<"Lightpos "<<lp3.x()<<" "<<lp3.y()<<" "<<lp3.z()<<" "<<std::endl;
-         bool front = ( n * ( lp3-v1 * _lightPos.w() ) ) >= 0; // dot product
+         bool front = ( n * ( lp3-v1 * _lightPos.w() ) ) > 0; // dot product
          if(_mode == ShadowVolumeGeometryGenerator::CPU_RAW && !front){
             Vec3 tmp = v1;
             v1 = v2;
             v2 = tmp;
             //return;
          }
-         else if( front && _mode == ShadowVolumeGeometryGenerator::CPU_SILHOUETTE && _method == ShadowVolumeGeometryGenerator::ZFAIL && _caps_vert != NULL){
+         else if(front && _mode == ShadowVolumeGeometryGenerator::CPU_SILHOUETTE && _method == ShadowVolumeGeometryGenerator::ZFAIL && _caps_vert != NULL){
             //notify(NOTICE)<<"ADD CAP"<<std::endl;
             Vec4 t1(v1,1.0);
             Vec4 t2(v2,1.0);
@@ -439,7 +439,7 @@ ref_ptr<Geometry> ShadowVolumeGeometryGenerator::createGeometry()
          /* all points should be in correct order now so let's construct the side of volume */
          _edge_vert->push_back(v1);
          _edge_vert->push_back(v0);
-         _edge_col->push_back(Vec4(1.0,0.0,0.0,1.0));_edge_col->push_back(Vec4(0.0,1.0,0.0,1.0));
+         _edge_col->push_back(Vec4(1.0,0.0,0.0,1.0));_edge_col->push_back(Vec4(1.0,0.0,0.0,1.0));
 
          _edge_vert->push_back(v0inf);
          _edge_vert->push_back(v1inf);        
@@ -521,7 +521,7 @@ ref_ptr<Geometry> ShadowVolumeGeometryGenerator::createGeometry()
       _caps_geo->setColorBinding(Geometry::BIND_PER_VERTEX);
       _caps_geo->addPrimitiveSet( new DrawArrays( PrimitiveSet::TRIANGLES, 0, _caps_vert->size()));
    }
-   else if(_mode == SILHOUETTES_ONLY){
+   else if(_mode == SILHOUETTES_ONLY){ //for debugging purposses
       removeDuplicateVertices(_triangleIndices);
       computeNormals();
       buildEdgeMap(_triangleIndices);
@@ -535,8 +535,8 @@ ref_ptr<Geometry> ShadowVolumeGeometryGenerator::createGeometry()
          /* all points should be in correct order now so let's construct the side of volume */
          _edge_vert->push_back(v1);
          _edge_vert->push_back(v0);
-         _edge_col->push_back(Vec4(1.0,0.0,0.0,1.0));
          _edge_col->push_back(Vec4(0.0,1.0,0.0,1.0));
+         _edge_col->push_back(Vec4(1.0,0.0,0.0,1.0));
       }
       _edges_geo->setVertexArray(_edge_vert);
       _edges_geo->setColorArray(_edge_col);
@@ -647,6 +647,10 @@ void ShadowVolumeGeometryGenerator::apply( Drawable* drawable )
       TriangleOnlyCollectorFunctor tc( _coords, _matrixStack.empty() ? NULL : &_matrixStack.back(), _lightPos );
       drawable->accept( tc );
            
+   }
+   else if(_mode == SILHOUETTES_ONLY){
+      TriangleOnlyCollectorFunctor tc( _coords, _matrixStack.empty() ? NULL : &_matrixStack.back(), _lightPos, CPU_SILHOUETTE ,_method , _caps_vert, _caps_col);
+      drawable->accept( tc );
    }
 
 }
@@ -767,7 +771,7 @@ void ShadowVolumeGeometryGenerator::removeDuplicateVertices(UIntList& indexMap)
          }
       }
 
-      if (numDuplicates==0) return;
+      //if (numDuplicates==0) return;
 
       // now assign the unique Vec4 to the newVertices arrays  
       if(!indexMap.empty()) indexMap.clear();
@@ -883,17 +887,6 @@ void ShadowVolumeGeometryGenerator::buildEdgeMap(UIntList &indexMap){
             if (!it->addTriangle(triNo)) ++numTriangleErrors;
       }
 
-      Edge edge13(p1,p3);
-      it = _edgeSet.find(edge13);
-      if (it == _edgeSet.end()) {
-         if (!edge13.addTriangle(triNo)) ++numTriangleErrors;
-         _edgeSet.insert(edge13);
-      }
-      else
-      {
-            if (!it->addTriangle(triNo)) ++numTriangleErrors;
-      }
-
       Edge edge23(p2,p3);
       it = _edgeSet.find(edge23);
       if (it == _edgeSet.end()) {
@@ -904,6 +897,18 @@ void ShadowVolumeGeometryGenerator::buildEdgeMap(UIntList &indexMap){
       {
             if (!it->addTriangle(triNo)) ++numTriangleErrors;
       }
+
+      Edge edge31(p3,p1);
+      it = _edgeSet.find(edge31);
+      if (it == _edgeSet.end()) {
+         if (!edge31.addTriangle(triNo)) ++numTriangleErrors;
+         _edgeSet.insert(edge31);
+      }
+      else
+      {
+            if (!it->addTriangle(triNo)) ++numTriangleErrors;
+      }
+
    }
    if(numTriangleErrors > 0)
       notify(WARN)<<"Number of bad triangles: "<<numTriangleErrors<<std::endl;
@@ -938,11 +943,11 @@ void ShadowVolumeGeometryGenerator::buildEdgeMap(UIntList &indexMap){
          GLuint p1 = _triangleIndices[edge._t1*3];
          GLuint p2 = _triangleIndices[edge._t1*3+1];
          GLuint p3 = _triangleIndices[edge._t1*3+2];
-         GLuint opposite = p1;
+         GLuint opposite = p1; //index of the vertex of _t1 triangle opposite to the current edge
          if (p1 != edge._p1 && p1 != edge._p2) opposite = p1;
          else if (p2 != edge._p1 && p2 != edge._p2) opposite = p2;
          else if (p3 != edge._p1 && p3 != edge._p2) opposite = p3;
-         pos = (*_coords)[opposite];
+         pos = (*_coords)[opposite]; //position of opposit vertex
       }
         
       if (edge._t2>=0)
@@ -1025,15 +1030,28 @@ bool ShadowVolumeGeometryGenerator::isLightSilhouetteEdge(const osg::Vec4& light
 {
    if (edge.boundaryEdge()) return true;
       
+   float offset = 0.0;
+   //float offset = -0.00001;
       
    osg::Vec4 delta(lightpos.x(),lightpos.y(),lightpos.z(),1.0);
    delta = (lightpos - (*_coords)[edge._p1] * lightpos.w());
    osg::Vec3 tolight = TriangleOnlyCollector::toVec3(delta);
-      
-   float n1 = tolight * _triangleNormals[edge._t1];
-   float n2 = tolight * _triangleNormals[edge._t2];
 
-   if (n1==0.0f && n2==0.0f) return false;
+   tolight.normalize();
+      
+   float n1 = tolight * _triangleNormals[edge._t1] + offset;
+   float n2 = tolight * _triangleNormals[edge._t2] + offset;
+
+   if (n1==0.0f && n2==0.0f){
+      return false;
+   }
+
+   //if one fase is parallel with light dir and the other is facing backwards - do not generate silhoute edge
+   if(n1 == 0.0f || n2 == 0.0f){
+      if(n1 < 0.0f || n2 < 0.0f){
+         return false;
+      }
+   }
       
    return n1*n2 <= 0.0f; 
 }
