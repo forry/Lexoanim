@@ -1,5 +1,6 @@
 #include "ShadowVolumeGeometryGenerator.h"
 #include <osg/TriangleFunctor>
+#include <osg/StateAttribute>
 
 using namespace osgShadow;
 
@@ -13,6 +14,8 @@ struct ShadowVolumeGeometryGenerator::TriangleOnlyCollector
    Vec4 _lightPos;
    ShadowVolumeGeometryGenerator::Modes _mode;
    ShadowVolumeGeometryGenerator::Methods _method;
+   unsigned int _fronface;
+   unsigned int _cullface;
 
    static inline Vec3 toVec3( const Vec4& v4)
    {
@@ -37,11 +40,17 @@ struct ShadowVolumeGeometryGenerator::TriangleOnlyCollector
       }
             
       if(_mode == ShadowVolumeGeometryGenerator::CPU_RAW || _mode == ShadowVolumeGeometryGenerator::CPU_SILHOUETTE){
-         Vec3 n = (v2-v1) ^ (v3-v1);          // normal of the face
+         Vec3 n;
+         if(_fronface == ShadowVolumeGeometryGenerator::CCW)
+            n = (v2-v1) ^ (v3-v1);          // normal of the face
+         else
+            n = (v3-v1) ^ (v2-v1);          // normal of the face
          Vec3 lp3 = toVec3( _lightPos );       // lightpos converted to Vec3
          //notify(NOTICE)<<"Lightpos "<<lp3.x()<<" "<<lp3.y()<<" "<<lp3.z()<<" "<<std::endl;
-         bool front = ( n * ( lp3-v1 * _lightPos.w() ) ) > 0; // dot product
-         if(_mode == ShadowVolumeGeometryGenerator::CPU_RAW && !front){
+         bool front = ( n * ( lp3-v1 * _lightPos.w() ) ) > 0; // dot product, when the face is parallel to light ( the normal is orthogonal) the face is considered back face. This helps with objects with holes (non-solid) so when we are computing silhouette in z-fail we are not making light caps out of it (causing problems with directional light).
+         if(_cullface = ShadowVolumeGeometryGenerator::BACK)
+            front = !front;
+         if(_mode == ShadowVolumeGeometryGenerator::CPU_RAW && !front && _cullface == ShadowVolumeGeometryGenerator::FRONT_AND_BACK){
             Vec3 tmp = v1;
             v1 = v2;
             v2 = tmp;
@@ -104,6 +113,7 @@ class ShadowVolumeGeometryGenerator::TriangleOnlyCollectorFunctor : public Trian
 {
 public:
    TriangleOnlyCollectorFunctor( Vec4Array *data, Matrix *m, const Vec4& lightPos,
+      unsigned int frontface, unsigned int cullface,
       ShadowVolumeGeometryGenerator::Modes mode = ShadowVolumeGeometryGenerator::CPU_SILHOUETTE,
       ShadowVolumeGeometryGenerator::Methods met = ShadowVolumeGeometryGenerator::ZPASS,
       Vec4Array *caps = NULL, Vec4Array *cols = NULL)
@@ -115,6 +125,8 @@ public:
       _lightPos = lightPos;
       _mode = mode;
       _method = met;
+      _fronface = frontface;
+      _cullface = _cullface;
    }
 };
 
@@ -217,7 +229,8 @@ ShadowVolumeGeometryGenerator::ShadowVolumeGeometryGenerator() :
         _caps_col(new Vec4Array),
         _mode(CPU_RAW),
         _method(ZPASS),
-        _shadowCastingFace(FRONT)
+        _shadowCastingFace(AUTO),
+        _faceOredering(AUTO)
 {}
 
 ShadowVolumeGeometryGenerator::ShadowVolumeGeometryGenerator( const Vec4& lightPos, Matrix* matrix) :
@@ -234,7 +247,8 @@ ShadowVolumeGeometryGenerator::ShadowVolumeGeometryGenerator( const Vec4& lightP
         _caps_col(new Vec4Array),
         _mode(CPU_RAW),
         _method(ZPASS),
-        _shadowCastingFace(FRONT)
+        _shadowCastingFace(AUTO),
+        _faceOredering(AUTO)
       
 {
    if( matrix )
@@ -278,22 +292,6 @@ ref_ptr<Geometry> ShadowVolumeGeometryGenerator::createGeometry()
          Vec4 v0inf = projectToInf(v0, _lightPos);
          Vec4 v1inf = projectToInf(v1, _lightPos);
          Vec4 v2inf = projectToInf(v2, _lightPos);
-
-         /*_edge_vert->push_back(v0);
-         _edge_vert->push_back(v1);
-
-         _edge_vert->push_back(v1);
-         _edge_vert->push_back(v2);
-
-         _edge_vert->push_back(v2);
-         _edge_vert->push_back(v0);
-
-         _edge_col->push_back(Vec4(1.0,0.0,0.0,0.1));
-         _edge_col->push_back(Vec4(1.0,0.0,0.0,0.1));
-         _edge_col->push_back(Vec4(1.0,0.0,0.0,0.1));
-         _edge_col->push_back(Vec4(1.0,0.0,0.0,0.1));
-         _edge_col->push_back(Vec4(1.0,0.0,0.0,0.1));
-         _edge_col->push_back(Vec4(1.0,0.0,0.0,0.1));*/
 
          _edge_vert->push_back(v0);
          _edge_vert->push_back(v0inf);
@@ -345,26 +343,7 @@ ref_ptr<Geometry> ShadowVolumeGeometryGenerator::createGeometry()
             _caps_col->push_back(Vec4(0.0,0.0,1.0,1.0));
             _caps_col->push_back(Vec4(0.0,0.0,1.0,1.0));
 
-         }
-
-         /*triangle strips version - can't make them though; need special drawable?*/
-         /*_edge_vert->push_back(v0);
-         _edge_vert->push_back(v0inf);
-         _edge_vert->push_back(v1);
-         _edge_vert->push_back(v1inf);
-         _edge_vert->push_back(v2);
-         _edge_vert->push_back(v2inf);
-         _edge_vert->push_back(v0);
-         _edge_vert->push_back(v0inf);
-
-         _edge_col->push_back(Vec4(1.0,0.0,0.0,1.0));
-         _edge_col->push_back(Vec4(0.0,0.0,1.0,1.0));
-         _edge_col->push_back(Vec4(1.0,0.0,0.0,1.0));
-         _edge_col->push_back(Vec4(0.0,0.0,1.0,1.0));
-         _edge_col->push_back(Vec4(1.0,0.0,0.0,1.0));
-         _edge_col->push_back(Vec4(0.0,0.0,1.0,1.0));
-         _edge_col->push_back(Vec4(1.0,0.0,0.0,1.0));
-         _edge_col->push_back(Vec4(0.0,0.0,1.0,1.0));*/
+         }         
       }
 
       _edges_geo->setVertexArray(_edge_vert);
@@ -389,52 +368,14 @@ ref_ptr<Geometry> ShadowVolumeGeometryGenerator::createGeometry()
       computeNormals();
       buildEdgeMap(_triangleIndices);
       computeSilhouette();
-      //notify(NOTICE)<<"Silhouette computed, now constructing new geometry."<<std::endl;
-
-         
-      /*notify(NOTICE)<<"EDGES:"<<std::endl;
-      std::vector<int> pole,indexes;
-      pole.reserve(_coords->size());
-      for(int i = 0; i<_coords->size();i++){
-         pole.push_back(0);
-      }*/
+      
       int ii = 0;
       for(UIntList::iterator it = _silhouetteIndices.begin(); it != _silhouetteIndices.end(); ii+=2){
-         //notify(NOTICE)<<*it<<std::endl<<*(it+1)<<std::endl;
-         //pole[*it] += 1;
-         //pole[*(it+1)] += 1;
-         //if(pole[*it] == 2 && pole[*(it+1)] == 2){
-         //   indexes.push_back(ii);
-         //   //notify(NOTICE)<<"-------"<<std::endl;
-         //   int iii = ii;
-         //   /*for(UIntList::iterator itb = it; itb>_silhouetteIndices.begin(); itb -=2){
-         //      if(pole[*itb] != 2 || pole[*(itb+1)] != 2){
-         //         indexes.push_back(iii);
-         //         break;
-         //      }
-         //      iii -= 2;
-         //   }*/
-         //}
-
+        
          Vec4 v0( (*_coords)[*it++]);
          Vec4 v1( (*_coords)[*it++]);
          Vec4 v0inf = projectToInf(v0, _lightPos);
          Vec4 v1inf = projectToInf(v1, _lightPos);
-
-         /*_edge_vert->push_back(v0);
-         _edge_vert->push_back(v1);
-         _edge_col->push_back(Vec4(1.0,0.0,0.0,1.0));
-         _edge_col->push_back(Vec4(0.0,0.0,1.0,1.0));
-
-         _edge_vert->push_back(v0);
-         _edge_vert->push_back(v0inf);
-         _edge_col->push_back(Vec4(1.0,0.0,0.0,1.0));
-         _edge_col->push_back(Vec4(0.0,0.0,1.0,1.0));
-
-         _edge_vert->push_back(v1);
-         _edge_vert->push_back(v1inf);
-         _edge_col->push_back(Vec4(1.0,0.0,0.0,1.0));
-         _edge_col->push_back(Vec4(0.0,0.0,1.0,1.0));*/
 
          /* all points should be in correct order now so let's construct the side of volume */
          _edge_vert->push_back(v1);
@@ -447,67 +388,6 @@ ref_ptr<Geometry> ShadowVolumeGeometryGenerator::createGeometry()
          _edge_col->push_back(Vec4(0.0,0.0,1.0,1.0));
 
       }
-         
-      //unsigned int s0 = _silhouetteIndices[0];
-      //Vec4 s0inf = (*_coords)[s0] - _lightPos;
-      //s0inf[3] = 0.0f;
-      //std::sort(indexes.begin(),indexes.end());
-      //int ind = 0;
-
-      //for(int i = 0; i<_silhouetteIndices.size();i++){
-      //   notify(NOTICE)<<_silhouetteIndices[i]<<std::endl;
-      //   if(ind<indexes.size())
-      //      if(i-1 == indexes[ind]){
-      //         notify(NOTICE)<<"-------"<<std::endl;
-      //         ind++;
-      //      }
-      //}
-      //for(UIntList::iterator it = _silhouetteIndices.begin(); it != _silhouetteIndices.end();){
-      //   /* edge contain starting point */
-      //   if(*(it) == s0 || *(it+1) == s0){
-      //      it += 2;
-      //      //it++;it++;
-      //      continue;
-      //   }
-      //   Vec4 v0( (*_coords)[*(it++)]);
-      //   Vec4 v1( (*_coords)[*(it++)]);
-      //   Vec4 v0inf = v0 - _lightPos;
-      //   v0inf._v[3] = 0.0f;
-      //   Vec4 v1inf = v1 - _lightPos;
-      //   v1inf._v[3] = 0.0f;
-
-      //   _caps_vert->push_back(s0inf);
-      //   _caps_vert->push_back(v1inf);
-      //   _caps_vert->push_back(v0inf);
-
-      //   _caps_col->push_back(Vec4(0.0,0.0,1.0,1.0));
-      //   _caps_col->push_back(Vec4(0.0,0.0,1.0,1.0));
-      //   _caps_col->push_back(Vec4(0.0,0.0,1.0,1.0));
-      //}
-
-      /* dark caps */
-      /*Edge e1 = (*(_edgeSet.begin()));
-      Vec4 v0inff = (*_coords)[e1._p1] - _lightPos;
-      v0inff[3] = 0.0f;
-      for(EdgeSet::iterator it = ++(_edgeSet.begin());
-         it != _edgeSet.end();
-         it++)
-      {
-         if( it->_p1 == e1._p1 || it->_p1 == e1._p1)
-            continue;
-         Vec4 v1inff = (*_coords)[it->_p1] - _lightPos;
-         v1inff[3] = 0.0f;
-         Vec4 v2inff = (*_coords)[it->_p2] - _lightPos;
-         v2inff[3] = 0.0f;
-
-         _caps_vert->push_back(v0inff);
-         _caps_vert->push_back(v2inff);
-         _caps_vert->push_back(v1inff);
-
-         _caps_col->push_back(Vec4(0.0,0.0,1.0,1.0));
-         _caps_col->push_back(Vec4(0.0,0.0,1.0,1.0));
-         _caps_col->push_back(Vec4(0.0,0.0,1.0,1.0));
-      }*/
 
       _edges_geo->setVertexArray(_edge_vert);
       _edges_geo->setColorArray(_edge_col);
@@ -568,17 +448,25 @@ ref_ptr<Geometry> ShadowVolumeGeometryGenerator::getCapsGeometry(){
 
 void ShadowVolumeGeometryGenerator::apply( Node& node )
 {
+   StateSet *ss = node.getStateSet();
+   if(ss)
+      setCurrentFacingAndOrdering(ss);
    if( node.getStateSet() )
       pushState( node.getStateSet() );
 
    traverse( node );
 
+   if(ss)
+      setCurrentFacingAndOrdering(ss);
    if( node.getStateSet() )
       popState();
 }
 
 void ShadowVolumeGeometryGenerator::apply( Transform& transform )
 {
+   StateSet *ss = transform.getStateSet();
+   if(ss)
+      setCurrentFacingAndOrdering(ss);
    if( transform.getStateSet() )
       pushState( transform.getStateSet() );
 
@@ -594,12 +482,18 @@ void ShadowVolumeGeometryGenerator::apply( Transform& transform )
 
    popMatrix();
 
+   if(ss)
+      setCurrentFacingAndOrdering(ss);
    if( transform.getStateSet() )
       popState();
 }
 
 void ShadowVolumeGeometryGenerator::apply( Geode& geode )
 {
+   StateSet *ss = geode.getStateSet();
+   if(ss)
+      setCurrentFacingAndOrdering(ss);
+
    if( geode.getStateSet() )
       pushState( geode.getStateSet() );
 
@@ -616,12 +510,17 @@ void ShadowVolumeGeometryGenerator::apply( Geode& geode )
             popState();
    }
 
+   if(ss)
+      setCurrentFacingAndOrdering(ss);
    if( geode.getStateSet() )
       popState();
 }
 
 void ShadowVolumeGeometryGenerator::apply( Drawable* drawable )
 {
+   StateSet *ss = drawable->getStateSet();
+   if(ss)
+      setCurrentFacingAndOrdering(ss);
    StateAttribute::GLModeValue blendModeValue;
    if( _blendModeStack.empty() ) blendModeValue = StateAttribute::INHERIT;
    else blendModeValue = _blendModeStack.back();
@@ -632,24 +531,24 @@ void ShadowVolumeGeometryGenerator::apply( Drawable* drawable )
    //}
         
    if(_mode == CPU_RAW){
-      TriangleOnlyCollectorFunctor tc( _coords, _matrixStack.empty() ? NULL : &_matrixStack.back(), _lightPos, CPU_RAW );
+      TriangleOnlyCollectorFunctor tc( _coords, _matrixStack.empty() ? NULL : &_matrixStack.back(), _lightPos, _currentFaceOredering, _currentShadowCastingFace,  CPU_RAW );
       drawable->accept( tc );
    }
    else if(_mode == CPU_SILHOUETTE){
-      TriangleOnlyCollectorFunctor tc( _coords, _matrixStack.empty() ? NULL : &_matrixStack.back(), _lightPos, CPU_SILHOUETTE ,_method , _caps_vert, _caps_col);
+      TriangleOnlyCollectorFunctor tc( _coords, _matrixStack.empty() ? NULL : &_matrixStack.back(), _lightPos, _currentFaceOredering, _currentShadowCastingFace, CPU_SILHOUETTE ,_method , _caps_vert, _caps_col);
       drawable->accept( tc );
    }
    else if(_mode == GPU_RAW){
-      TriangleOnlyCollectorFunctor tc( _coords, _matrixStack.empty() ? NULL : &_matrixStack.back(), _lightPos );
+      TriangleOnlyCollectorFunctor tc( _coords, _matrixStack.empty() ? NULL : &_matrixStack.back(), _lightPos, _currentFaceOredering, _currentShadowCastingFace );
       drawable->accept( tc );
    }
    else if(_mode == CPU_FIND_GPU_EXTRUDE){
-      TriangleOnlyCollectorFunctor tc( _coords, _matrixStack.empty() ? NULL : &_matrixStack.back(), _lightPos );
+      TriangleOnlyCollectorFunctor tc( _coords, _matrixStack.empty() ? NULL : &_matrixStack.back(), _lightPos, _currentFaceOredering, _currentShadowCastingFace );
       drawable->accept( tc );
            
    }
    else if(_mode == SILHOUETTES_ONLY){
-      TriangleOnlyCollectorFunctor tc( _coords, _matrixStack.empty() ? NULL : &_matrixStack.back(), _lightPos, CPU_SILHOUETTE ,_method , _caps_vert, _caps_col);
+      TriangleOnlyCollectorFunctor tc( _coords, _matrixStack.empty() ? NULL : &_matrixStack.back(), _lightPos, _currentFaceOredering, _currentShadowCastingFace, CPU_SILHOUETTE ,_method , _caps_vert, _caps_col);
       drawable->accept( tc );
    }
 
@@ -877,12 +776,12 @@ void ShadowVolumeGeometryGenerator::buildEdgeMap(UIntList &indexMap){
       unsigned int p3 = *titr++;
 
       Edge edge12(p1,p2);
-      EdgeSet::iterator it = _edgeSet.find(edge12);
-      if (it == _edgeSet.end()) {
+      EdgeSet::iterator it = _edgeSet.find(edge12); //find if the edge already exists in set
+      if (it == _edgeSet.end()) { //if not then add triangle and add edge to the set
          if (!edge12.addTriangle(triNo)) ++numTriangleErrors;
          _edgeSet.insert(edge12);
       }
-      else
+      else //if already exists, then just add the triangle
       {
             if (!it->addTriangle(triNo)) ++numTriangleErrors;
       }
@@ -1009,11 +908,17 @@ void ShadowVolumeGeometryGenerator::computeSilhouette(){
             Vec3 v2 = TriangleOnlyCollector::toVec3((*_coords)[edge._p2]); //v2.set((*_coords)[edge._p2].x(), (*_coords)[edge._p2].y(), (*_coords)[edge._p2].z());
             Vec3 lightpos = TriangleOnlyCollector::toVec3(_lightPos); //lightpos.set(_lightPos.x(), _lightPos.y(), _lightPos.z());
             osg::Vec3 normal = (v2-v1) ^ (v1 * _lightPos.w() - lightpos);
-            if (normal * edge._normal > 0.0)
+            float dir = normal * edge._normal;
+            if (dir > 0.0)
             {        
                   _silhouetteIndices.push_back(edge._p1);
                   _silhouetteIndices.push_back(edge._p2);
             }
+            //else if(dir == 0.0f) //silhouette when normal is orthogonal to edge normal means the light is parallel to edge normal and it is a boundary edge (of non-solid object)
+            //{
+            //   //we only take edge normal, this "normal" points into the object instead of out of it
+            //   if( edge._normal
+            //}
             else
             {
                   _silhouetteIndices.push_back(edge._p2);
@@ -1047,11 +952,11 @@ bool ShadowVolumeGeometryGenerator::isLightSilhouetteEdge(const osg::Vec4& light
    }
 
    //if one fase is parallel with light dir and the other is facing backwards - do not generate silhoute edge
-   if(n1 == 0.0f || n2 == 0.0f){
+   /*if(n1 == 0.0f || n2 == 0.0f){
       if(n1 < 0.0f || n2 < 0.0f){
          return false;
       }
-   }
+   }*/
       
    return n1*n2 <= 0.0f; 
 }
@@ -1095,4 +1000,19 @@ Vec4 ShadowVolumeGeometryGenerator::projectToInf(Vec4 point, Vec4 light)
    Vec4 res;
    res = point * light.w() - light;
    return res;
+}
+
+void ShadowVolumeGeometryGenerator::setCurrentFacingAndOrdering(StateSet *ss)
+{
+   FrontFace *ff = dynamic_cast<FrontFace *>(ss->getAttribute(StateAttribute::FRONTFACE));
+   if(ff && _faceOredering == AUTO)
+   {
+      _currentFaceOredering = ff->getMode();
+   }
+
+   CullFace *cf = dynamic_cast<CullFace *>(ss->getAttribute(StateAttribute::CULLFACE));
+   if(cf && _shadowCastingFace == AUTO)
+   {
+      _currentShadowCastingFace = cf->getMode();
+   }
 }

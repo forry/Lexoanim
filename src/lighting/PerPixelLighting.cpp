@@ -253,9 +253,9 @@ void PerPixelLighting::convert( Node *scene, ShadowTechnique shadowTechnique )
                      if( passNum <=2 )
                         sv->setClearStencil( false ); // stencil is cleared on the beginning of the frame
                      sv->setMethod( osgShadow::ShadowVolumeGeometryGenerator::ZFAIL );
-                     sv->setMode(osgShadow::ShadowVolumeGeometryGenerator::SILHOUETTES_ONLY);
+                     sv->setMode(osgShadow::ShadowVolumeGeometryGenerator::CPU_RAW);
                      sv->setStencilImplementation( osgShadow::ShadowVolume::STENCIL_TWO_SIDED );
-                     sv->setShadowCastingFace( osgShadow::ShadowVolumeGeometryGenerator::BACK );
+                     sv->setShadowCastingFace( osgShadow::ShadowVolumeGeometryGenerator::FRONT );
                      sv->setUpdateStrategy( osgShadow::ShadowVolume::MANUAL_INVALIDATE );
                      shadowedScene->setShadowTechnique( sv );
                      break;

@@ -18,6 +18,8 @@
 #include <osgShadow/ShadowedScene>
 #include <osg/Drawable>
 #include <osg/Referenced>
+#include <osg/FrontFace>
+#include <osg/CullFace>
 
 //debug
 #include <osg/io_utils>
@@ -67,7 +69,11 @@ public:
    };
 
     enum ShadowCastingFace {
-        FRONT = GL_FRONT, BACK = GL_BACK, FRONT_AND_BACK = GL_FRONT_AND_BACK
+       FRONT = CullFace::FRONT, BACK = CullFace::BACK, FRONT_AND_BACK = CullFace::FRONT_AND_BACK, AUTO
+    };
+
+    enum FaceOrdering {
+       CCW = FrontFace::COUNTER_CLOCKWISE, CW = FrontFace::CLOCKWISE
     };
 
    META_NodeVisitor( "osgShadow", "ShadowVolumeGeometryGenerator" )
@@ -187,8 +193,22 @@ public:
    /**
     * Set/get facing of triangles desired for shadow casting.
     */
-   inline virtual void setShadowCastingFace( ShadowCastingFace shadowCastingFace ){_shadowCastingFace = shadowCastingFace;}
-   inline ShadowCastingFace getShadowCastingFace() const {return _shadowCastingFace;}
+   inline virtual void setShadowCastingFace( ShadowCastingFace shadowCastingFace )
+   {
+      _shadowCastingFace = shadowCastingFace;
+      _currentShadowCastingFace = shadowCastingFace;
+   }
+   inline unsigned int getShadowCastingFace() const {return _shadowCastingFace;}
+
+   /**
+    * Set/get face ordering of geometry used for shadow casting.
+    */
+   inline virtual void setFaceOrdering( FaceOrdering faceOrdering )
+   {
+      _faceOredering = faceOrdering;
+      _currentFaceOredering = faceOrdering;
+   }
+   inline unsigned int getFaceOrdering() const {return _faceOredering;}
 
 protected:
 
@@ -237,11 +257,14 @@ protected:
 
    virtual bool isLightSilhouetteEdge(const osg::Vec4& lightpos, const Edge& edge) const;
 
+   virtual void setCurrentFacingAndOrdering(StateSet * ss);
+
    /**
     * Computes a point in infinity projected from light. Used for both
     * positional and directional lights.
     */
    static Vec4 projectToInf(Vec4 point, Vec4 light);
+
 
     bool                     _dirty;
     MatrixStack              _matrixStack;
@@ -249,7 +272,11 @@ protected:
 
     Modes                    _mode;
     Methods                  _method;
-    ShadowCastingFace        _shadowCastingFace;
+    unsigned int             _shadowCastingFace;
+    unsigned int             _faceOredering;
+
+    unsigned int             _currentShadowCastingFace;
+    unsigned int             _currentFaceOredering;
 
     UIntList                 _triangleIndices;
     Vec3List                 _triangleNormals;
@@ -270,6 +297,8 @@ protected:
 
     UIntList                 _silhouetteIndices; //indices of vertices of possible silhouette
     EdgeSet _edgeSet;
+
+
 };
 
 }//namespace osgShadow
