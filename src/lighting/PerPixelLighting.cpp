@@ -255,7 +255,8 @@ void PerPixelLighting::convert( Node *scene, ShadowTechnique shadowTechnique )
                      sv->setMethod( osgShadow::ShadowVolumeGeometryGenerator::ZFAIL );
                      sv->setMode(osgShadow::ShadowVolumeGeometryGenerator::CPU_RAW);
                      sv->setStencilImplementation( osgShadow::ShadowVolume::STENCIL_TWO_SIDED );
-                     sv->setShadowCastingFace( osgShadow::ShadowVolumeGeometryGenerator::FRONT );
+                     sv->setShadowCastingFace( osgShadow::ShadowVolumeGeometryGenerator::BACK );
+                     //sv->setFaceOrdering(osgShadow::ShadowVolumeGeometryGenerator::CW);
                      sv->setUpdateStrategy( osgShadow::ShadowVolume::MANUAL_INVALIDATE );
                      shadowedScene->setShadowTechnique( sv );
                      break;

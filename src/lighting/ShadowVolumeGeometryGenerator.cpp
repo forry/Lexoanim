@@ -14,8 +14,8 @@ struct ShadowVolumeGeometryGenerator::TriangleOnlyCollector
    Vec4 _lightPos;
    ShadowVolumeGeometryGenerator::Modes _mode;
    ShadowVolumeGeometryGenerator::Methods _method;
-   unsigned int _fronface;
-   unsigned int _cullface;
+   ShadowVolumeGeometryGenerator::FaceOrdering _fronface;
+   ShadowVolumeGeometryGenerator::ShadowCastingFace _castface;
 
    static inline Vec3 toVec3( const Vec4& v4)
    {
@@ -46,15 +46,37 @@ struct ShadowVolumeGeometryGenerator::TriangleOnlyCollector
          else
             n = (v3-v1) ^ (v2-v1);          // normal of the face
          Vec3 lp3 = toVec3( _lightPos );       // lightpos converted to Vec3
-         //notify(NOTICE)<<"Lightpos "<<lp3.x()<<" "<<lp3.y()<<" "<<lp3.z()<<" "<<std::endl;
-         bool front = ( n * ( lp3-v1 * _lightPos.w() ) ) > 0; // dot product, when the face is parallel to light ( the normal is orthogonal) the face is considered back face. This helps with objects with holes (non-solid) so when we are computing silhouette in z-fail we are not making light caps out of it (causing problems with directional light).
-         if(_cullface = ShadowVolumeGeometryGenerator::BACK)
-            front = !front;
-         if(_mode == ShadowVolumeGeometryGenerator::CPU_RAW && !front && _cullface == ShadowVolumeGeometryGenerator::FRONT_AND_BACK){
+
+         /** 
+          * Is the current triangle facing to the light in given vertex ordering.
+          * Dot product of normal with to-light vector. The normal is in given CW or CCW order.
+          * The > sign means, that when the face is parallel to light ( the normal is orthogonal) the
+          * face is considered back face (otherwise there would be >=). This helps with objects with
+          * holes (non-solid) so when we are computing silhouette in z-fail we are not making light
+          * caps out of it (causing problems with directional light).
+          */
+         bool front = ( n * ( lp3-v1 * _lightPos.w() ) ) > 0;
+
+         //if(_castface = ShadowVolumeGeometryGenerator::BACK)
+         //   front = !front;
+         if(_mode == ShadowVolumeGeometryGenerator::CPU_RAW && !front
+            && (_castface == ShadowVolumeGeometryGenerator::FRONT_AND_BACK || _castface == ShadowVolumeGeometryGenerator::BACK)
+           )
+         {
             Vec3 tmp = v1;
             v1 = v2;
             v2 = tmp;
             //return;
+         }
+         //in case of not shadow casting face in CPU_RAW
+         else if(_mode == ShadowVolumeGeometryGenerator::CPU_RAW && 
+                  (
+                     (!front && _castface == ShadowVolumeGeometryGenerator::FRONT) ||
+                     ( front && _castface == ShadowVolumeGeometryGenerator::BACK)
+                  )
+                )
+         {
+            return; //the triangle is not shadow casting face
          }
          else if(front && _mode == ShadowVolumeGeometryGenerator::CPU_SILHOUETTE && _method == ShadowVolumeGeometryGenerator::ZFAIL && _caps_vert != NULL){
             //notify(NOTICE)<<"ADD CAP"<<std::endl;
@@ -113,7 +135,7 @@ class ShadowVolumeGeometryGenerator::TriangleOnlyCollectorFunctor : public Trian
 {
 public:
    TriangleOnlyCollectorFunctor( Vec4Array *data, Matrix *m, const Vec4& lightPos,
-      unsigned int frontface, unsigned int cullface,
+      ShadowVolumeGeometryGenerator::FaceOrdering frontface, ShadowVolumeGeometryGenerator::ShadowCastingFace castface,
       ShadowVolumeGeometryGenerator::Modes mode = ShadowVolumeGeometryGenerator::CPU_SILHOUETTE,
       ShadowVolumeGeometryGenerator::Methods met = ShadowVolumeGeometryGenerator::ZPASS,
       Vec4Array *caps = NULL, Vec4Array *cols = NULL)
@@ -126,7 +148,7 @@ public:
       _mode = mode;
       _method = met;
       _fronface = frontface;
-      _cullface = _cullface;
+      _castface = castface;
    }
 };
 
@@ -229,8 +251,10 @@ ShadowVolumeGeometryGenerator::ShadowVolumeGeometryGenerator() :
         _caps_col(new Vec4Array),
         _mode(CPU_RAW),
         _method(ZPASS),
-        _shadowCastingFace(AUTO),
-        _faceOredering(AUTO)
+        _shadowCastingFace(CF_AUTO),
+        _faceOredering(FO_AUTO),
+        _currentShadowCastingFace(FRONT),
+        _currentFaceOredering(CCW)
 {}
 
 ShadowVolumeGeometryGenerator::ShadowVolumeGeometryGenerator( const Vec4& lightPos, Matrix* matrix) :
@@ -247,8 +271,10 @@ ShadowVolumeGeometryGenerator::ShadowVolumeGeometryGenerator( const Vec4& lightP
         _caps_col(new Vec4Array),
         _mode(CPU_RAW),
         _method(ZPASS),
-        _shadowCastingFace(AUTO),
-        _faceOredering(AUTO)
+        _shadowCastingFace(CF_AUTO),
+        _faceOredering(FO_AUTO),
+        _currentShadowCastingFace(FRONT),
+        _currentFaceOredering(CCW)
       
 {
    if( matrix )
@@ -326,6 +352,7 @@ ref_ptr<Geometry> ShadowVolumeGeometryGenerator::createGeometry()
          /* generate caps */
          if(_method == ZFAIL){
             /* light cap */
+            //if(_currentFaceOredering == CCW &&
             _caps_vert->push_back(v0);
             _caps_vert->push_back(v1);
             _caps_vert->push_back(v2);
@@ -1005,14 +1032,19 @@ Vec4 ShadowVolumeGeometryGenerator::projectToInf(Vec4 point, Vec4 light)
 void ShadowVolumeGeometryGenerator::setCurrentFacingAndOrdering(StateSet *ss)
 {
    FrontFace *ff = dynamic_cast<FrontFace *>(ss->getAttribute(StateAttribute::FRONTFACE));
-   if(ff && _faceOredering == AUTO)
+   if(ff && _faceOredering == FO_AUTO)
    {
-      _currentFaceOredering = ff->getMode();
+      _currentFaceOredering = (FaceOrdering) ff->getMode();
    }
 
    CullFace *cf = dynamic_cast<CullFace *>(ss->getAttribute(StateAttribute::CULLFACE));
-   if(cf && _shadowCastingFace == AUTO)
+   if(cf && _shadowCastingFace == CF_AUTO)
    {
-      _currentShadowCastingFace = cf->getMode();
+      if(cf->getMode() == CullFace::FRONT)
+         _currentShadowCastingFace = BACK;
+      else if(cf->getMode() == CullFace::BACK)
+         _currentShadowCastingFace = FRONT;
+      else
+         _currentShadowCastingFace = FRONT_AND_BACK;
    }
 }

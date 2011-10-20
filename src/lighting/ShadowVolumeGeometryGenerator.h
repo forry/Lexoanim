@@ -68,13 +68,22 @@ public:
       ZFAIL = 2
    };
 
-    enum ShadowCastingFace {
-       FRONT = CullFace::FRONT, BACK = CullFace::BACK, FRONT_AND_BACK = CullFace::FRONT_AND_BACK, AUTO
-    };
+   /**
+    * The orientation of the faces that will cast a shadow. It may seem, from constants,
+    * that the orientation will be culled, but that's just a coincidence. AUTO means
+    * that the value will be taken from statesets.
+    */
+   enum ShadowCastingFace {
+      FRONT = CullFace::FRONT, BACK = CullFace::BACK, FRONT_AND_BACK = CullFace::FRONT_AND_BACK, CF_AUTO
+   };
 
-    enum FaceOrdering {
-       CCW = FrontFace::COUNTER_CLOCKWISE, CW = FrontFace::CLOCKWISE
-    };
+   /**
+    * The winding we sould consider as front-facing. Auto means that the value will be
+    * taken from statesets.
+    */
+   enum FaceOrdering {
+      CW = FrontFace::CLOCKWISE, CCW = FrontFace::COUNTER_CLOCKWISE, FO_AUTO
+   };
 
    META_NodeVisitor( "osgShadow", "ShadowVolumeGeometryGenerator" )
 
@@ -191,24 +200,26 @@ public:
    virtual void clearGeometry();
    
    /**
-    * Set/get facing of triangles desired for shadow casting.
+    * Set/get facing of triangles desired for shadow casting. Default is 
+    * CF_AUTO. That means it gets it's value from statesets.
     */
    inline virtual void setShadowCastingFace( ShadowCastingFace shadowCastingFace )
    {
       _shadowCastingFace = shadowCastingFace;
       _currentShadowCastingFace = shadowCastingFace;
    }
-   inline unsigned int getShadowCastingFace() const {return _shadowCastingFace;}
+   inline ShadowCastingFace getShadowCastingFace() const {return _shadowCastingFace;}
 
    /**
-    * Set/get face ordering of geometry used for shadow casting.
+    * Set/get face ordering of geometry used for shadow casting. Default is 
+    * FO_AUTO. That means it gets it's value from statesets.
     */
    inline virtual void setFaceOrdering( FaceOrdering faceOrdering )
    {
       _faceOredering = faceOrdering;
       _currentFaceOredering = faceOrdering;
    }
-   inline unsigned int getFaceOrdering() const {return _faceOredering;}
+   inline FaceOrdering getFaceOrdering() const {return _faceOredering;}
 
 protected:
 
@@ -272,11 +283,11 @@ protected:
 
     Modes                    _mode;
     Methods                  _method;
-    unsigned int             _shadowCastingFace;
-    unsigned int             _faceOredering;
+    ShadowCastingFace        _shadowCastingFace;
+    FaceOrdering             _faceOredering;
 
-    unsigned int             _currentShadowCastingFace;
-    unsigned int             _currentFaceOredering;
+    ShadowCastingFace        _currentShadowCastingFace;
+    FaceOrdering             _currentFaceOredering;
 
     UIntList                 _triangleIndices;
     Vec3List                 _triangleNormals;

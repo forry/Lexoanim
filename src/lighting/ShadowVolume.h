@@ -93,7 +93,11 @@ public:
     inline UpdateStrategy getUpdateStrategy() const {return _updateStrategy;}
 
     inline virtual void setShadowCastingFace( ShadowVolumeGeometryGenerator::ShadowCastingFace shadowCastingFace ){_svgg.setShadowCastingFace(shadowCastingFace);}
-    inline unsigned int getShadowCastingFace() const {return _svgg.getShadowCastingFace();}
+    inline ShadowVolumeGeometryGenerator::ShadowCastingFace getShadowCastingFace() const {return _svgg.getShadowCastingFace();}
+
+    inline virtual void setFaceOrdering( ShadowVolumeGeometryGenerator::FaceOrdering faceOrdering ){_svgg.setFaceOrdering(faceOrdering);}
+    inline ShadowVolumeGeometryGenerator::FaceOrdering getFaceOrdering() const {return _svgg.getFaceOrdering();}
+
 
     inline virtual void setClearStencil( bool value ){ _clearStencil = value;}
     inline virtual bool getClearStencil() const { return _clearStencil;}
