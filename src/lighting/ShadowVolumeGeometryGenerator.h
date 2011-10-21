@@ -236,6 +236,8 @@ protected:
     */
    virtual void removeDuplicateVertices(UIntList& indexMap);
 
+   virtual void removeNullTriangles();
+
    /**
     * Computes normal of vertices. Call removeDuplicateVertices() first.
     *

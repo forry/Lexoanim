@@ -78,7 +78,19 @@ struct ShadowVolumeGeometryGenerator::TriangleOnlyCollector
          {
             return; //the triangle is not shadow casting face
          }
-         else if(front && _mode == ShadowVolumeGeometryGenerator::CPU_SILHOUETTE && _method == ShadowVolumeGeometryGenerator::ZFAIL && _caps_vert != NULL){
+         //In z-fail silhouette case, we need to generate caps now becuse there is no algorithm for
+         //creating it from silhouette, and it is impossible in case of light cap. Light cap need
+         //to be the actual geometry.
+         else if( _mode == ShadowVolumeGeometryGenerator::CPU_SILHOUETTE
+               && _method == ShadowVolumeGeometryGenerator::ZFAIL
+               && _caps_vert != NULL
+               //now we are sure we need caps, so we need to generate them from shadowcasting faces, right?
+               &&(
+                     ( front && _castface == ShadowVolumeGeometryGenerator::FRONT)
+                  || (!front && _castface == ShadowVolumeGeometryGenerator::BACK)
+                 )
+               )
+         {
             //notify(NOTICE)<<"ADD CAP"<<std::endl;
             Vec4 t1(v1,1.0);
             Vec4 t2(v2,1.0);
@@ -392,6 +404,7 @@ ref_ptr<Geometry> ShadowVolumeGeometryGenerator::createGeometry()
       //notify(NOTICE)<<"vert count: "<<(*_coords.get()).size()<<std::endl;
       //notify(NOTICE)<<"vert count: "<<(*_coords).size()<<std::endl;
       removeDuplicateVertices(_triangleIndices);
+      removeNullTriangles();
       computeNormals();
       buildEdgeMap(_triangleIndices);
       computeSilhouette();
@@ -430,6 +443,7 @@ ref_ptr<Geometry> ShadowVolumeGeometryGenerator::createGeometry()
    }
    else if(_mode == SILHOUETTES_ONLY){ //for debugging purposses
       removeDuplicateVertices(_triangleIndices);
+      removeNullTriangles();
       computeNormals();
       buildEdgeMap(_triangleIndices);
       computeSilhouette();
@@ -738,6 +752,48 @@ void ShadowVolumeGeometryGenerator::removeDuplicateVertices(UIntList& indexMap)
       _coords->swap(newVertices);
 }
 
+void ShadowVolumeGeometryGenerator::removeNullTriangles()
+{
+    // OSG_NOTICE<<"OccluderGeometry::removeNullTriangles()"<<std::endl;
+
+    unsigned int numNullTraingles = 0;
+    UIntList::iterator lastValidItr = _triangleIndices.begin();
+    for(UIntList::iterator titr = _triangleIndices.begin();
+        titr != _triangleIndices.end();
+        )
+    {
+        UIntList::iterator currItr = titr;
+        GLuint p1 = *titr++;
+        GLuint p2 = *titr++;
+        GLuint p3 = *titr++;
+        if ((p1 != p2) && (p1 != p3) && (p2 != p3))
+        {
+            if (lastValidItr!=currItr)
+            {
+                *lastValidItr++ = p1;
+                *lastValidItr++ = p2;
+                *lastValidItr++ = p3;
+            }
+            else
+            {
+                lastValidItr = titr;
+            }
+        }
+        else
+        {
+            // OSG_NOTICE<<"Null triangle"<<std::endl;
+           numNullTraingles++;
+        }
+    }
+    if (lastValidItr != _triangleIndices.end())
+    {
+        // OSG_NOTICE<<"Pruning end - before "<<_triangleIndices.size()<<std::endl;
+        _triangleIndices.erase(lastValidItr,_triangleIndices.end());
+        // OSG_NOTICE<<"Pruning end - after "<<_triangleIndices.size()<<std::endl;
+    }
+    OSG_INFO<<"Number of null triangles: "<<numNullTraingles<<std::endl;
+}
+
 void ShadowVolumeGeometryGenerator::computeNormals()
 {
        
@@ -917,17 +973,26 @@ void ShadowVolumeGeometryGenerator::buildEdgeMap(UIntList &indexMap){
       _points_edge[(*eitr)._p2].push_back(curr_edge);
 
    }
+   OSG_INFO<<"Num of boundary edges: "<<numEdgesWithOneTriangles<<std::endl;
 }
 
 void ShadowVolumeGeometryGenerator::computeSilhouette(){
       _silhouetteIndices.clear();
       //notify(NOTICE)<<"computeSilhouette():"<<std::endl;
+      unsigned int numPar = 0;
     
       for(EdgeSet::const_iterator eitr = _edgeSet.begin();
          eitr != _edgeSet.end();
          ++eitr)
       {
+
          const Edge& edge = *eitr;
+         /** show only bounary edges - DEBUG */
+         /*if(!edge.boundaryEdge())
+         {
+            continue;
+         }*/
+
          if (isLightSilhouetteEdge(_lightPos,edge))
          {
              
@@ -936,16 +1001,24 @@ void ShadowVolumeGeometryGenerator::computeSilhouette(){
             Vec3 lightpos = TriangleOnlyCollector::toVec3(_lightPos); //lightpos.set(_lightPos.x(), _lightPos.y(), _lightPos.z());
             osg::Vec3 normal = (v2-v1) ^ (v1 * _lightPos.w() - lightpos);
             float dir = normal * edge._normal;
+            /**DEBUG only bad boundary edge parallel to light dir*/
+            //if(dir == 0.0f) //silhouette when normal is orthogonal to edge normal means the light is parallel to edge normal and it is a boundary edge (of non-solid object)
+            //{
+            //   //we only take edge normal, this "normal" points into the object instead of out of it
+            //   _silhouetteIndices.push_back(edge._p1);
+            //   _silhouetteIndices.push_back(edge._p2);
+            //   numPar++;
+            //   continue;
+            //}
+            //else
+            //   continue;
+            /** END DEBUG only bad boundary edge parallel to light dir*/
+
             if (dir > 0.0)
             {        
                   _silhouetteIndices.push_back(edge._p1);
                   _silhouetteIndices.push_back(edge._p2);
             }
-            //else if(dir == 0.0f) //silhouette when normal is orthogonal to edge normal means the light is parallel to edge normal and it is a boundary edge (of non-solid object)
-            //{
-            //   //we only take edge normal, this "normal" points into the object instead of out of it
-            //   if( edge._normal
-            //}
             else
             {
                   _silhouetteIndices.push_back(edge._p2);
@@ -954,7 +1027,7 @@ void ShadowVolumeGeometryGenerator::computeSilhouette(){
 
          }
       }
-      //notify(NOTICE)<<"~~END"<<std::endl;
+      notify(NOTICE)<<"Number of paralle boundary edges: "<<numPar<<std::endl;
 }
 
 

@@ -21,6 +21,8 @@
 #include <osgViewer/View>
 #include <iostream>
 
+#include <osg/PolygonMode>
+
 #include "ShadowVolume.h"
 #include "ClearGLBuffersDrawable.h"
 //#include "SVKeyboardHandler.h"
@@ -411,9 +413,14 @@ void ShadowVolume::init()
     stencil4->setOperation( Stencil::KEEP, Stencil::KEEP, Stencil::KEEP );
     _ss4->setAttributeAndModes( stencil4, StateAttribute::ON );
 
-    //debuging stateset
+    //debuging stateset for wireframe
+    //PolygonMode *polygMode = new PolygonMode(PolygonMode::FRONT, PolygonMode::LINE);
+    //_ss4->setAttributeAndModes(polygMode,StateAttribute::ON | StateAttribute::OVERRIDE);
+
+    //debuging stateset for silhouette
     _ssd = new StateSet();
     _ssd->setMode( GL_LIGHTING, StateAttribute::OFF | StateAttribute::OVERRIDE );
+
     
 }
 
