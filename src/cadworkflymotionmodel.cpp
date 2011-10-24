@@ -22,7 +22,13 @@
 #include <dtCore/deltawin.h>
 #include <dtCore/button.h>
 
+#include <osgUtil/LineSegmentIntersector>
+#include <osgUtil/IntersectionVisitor>
+
+
 using namespace dtCore;
+
+const float CadworkFlyMotionModel::MIN_DISTANCE = 0.01f;
 
 IMPLEMENT_MANAGEMENT_LAYER(CadworkFlyMotionModel)
 
@@ -96,44 +102,54 @@ void CadworkFlyMotionModel::SetDefaultMappings(Keyboard* keyboard, Mouse* mouse)
 
       Axis *leftButtonUpAndDown, *leftButtonLeftAndRight;
 
-      if (HasOption(OPTION_REQUIRE_MOUSE_DOWN))
-      {
-         /*leftButtonUpAndDown = mDefaultInputDevice->AddAxis(
-            "left mouse button up/down",
-            mLeftButtonUpDownMapping = new ButtonAxisToAxis(
-               mouse->GetButton(Mouse::LeftButton),
-               mouse->GetAxis(1))
-         );
+      //if (HasOption(OPTION_REQUIRE_MOUSE_DOWN))
+      //{
+      //   leftButtonUpAndDown = mDefaultInputDevice->AddAxis(
+      //      "left mouse button up/down",
+      //      mLeftButtonUpDownMapping = new ButtonAxisToAxis(
+      //         mouse->GetButton(Mouse::LeftButton),
+      //         mouse->GetAxis(1))
+      //   );
 
-         leftButtonLeftAndRight = mDefaultInputDevice->AddAxis(
-            "left mouse button left/right",
-            mLeftButtonLeftRightMapping = new ButtonAxisToAxis(
-               mouse->GetButton(Mouse::LeftButton),
-               mouse->GetAxis(0)
-            )
-         );*/
-         leftButtonUpAndDown = mDefaultInputDevice->AddAxis(
-            "left mouse movement up/down",
-            new AxisToAxis(mouse->GetAxis(1))
-         );
+      //   leftButtonLeftAndRight = mDefaultInputDevice->AddAxis(
+      //      "left mouse button left/right",
+      //      mLeftButtonLeftRightMapping = new ButtonAxisToAxis(
+      //         mouse->GetButton(Mouse::LeftButton),
+      //         mouse->GetAxis(0)
+      //      )
+      //   );
+      //   /*leftButtonUpAndDown = mDefaultInputDevice->AddAxis(
+      //      "left mouse movement up/down",
+      //      new AxisToAxis(mouse->GetAxis(1))
+      //   );
 
-         leftButtonLeftAndRight = mDefaultInputDevice->AddAxis(
-            "left mouse movement left/right",
-            new AxisToAxis(mouse->GetAxis(0))
-         );
-      }
-      else
-      {
-         leftButtonUpAndDown = mDefaultInputDevice->AddAxis(
-            "left mouse movement up/down",
-            new AxisToAxis(mouse->GetAxis(1))
-         );
+      //   leftButtonLeftAndRight = mDefaultInputDevice->AddAxis(
+      //      "left mouse movement left/right",
+      //      new AxisToAxis(mouse->GetAxis(0))
+      //   );*/
+      //}
+      //else
+      //{
+      //   leftButtonUpAndDown = mDefaultInputDevice->AddAxis(
+      //      "left mouse movement up/down",
+      //      new AxisToAxis(mouse->GetAxis(1))
+      //   );
 
-         leftButtonLeftAndRight = mDefaultInputDevice->AddAxis(
-            "left mouse movement left/right",
-            new AxisToAxis(mouse->GetAxis(0))
-         );
-      }
+      //   leftButtonLeftAndRight = mDefaultInputDevice->AddAxis(
+      //      "left mouse movement left/right",
+      //      new AxisToAxis(mouse->GetAxis(0))
+      //   );
+      //}
+
+      leftButtonUpAndDown = mDefaultInputDevice->AddAxis(
+         "left mouse movement up/down",
+         new AxisToAxis(mouse->GetAxis(1))
+      );
+
+      leftButtonLeftAndRight = mDefaultInputDevice->AddAxis(
+         "left mouse movement left/right",
+         new AxisToAxis(mouse->GetAxis(0))
+      );
 
       Axis* rightButtonUpAndDown = mDefaultInputDevice->AddAxis(
          "right mouse button up/down",
@@ -273,6 +289,8 @@ void CadworkFlyMotionModel::SetDefaultMappings(Keyboard* keyboard, Mouse* mouse)
          mouse->GetButton(Mouse::RightButton),
          ButtonsToButton::SINGLE_BUTTON
          );
+
+      mMouseWheelUpDownMapping = new AxisToAxis(mouse->GetAxis(2),0.05,0.0);
    }
    else
    {
@@ -338,6 +356,9 @@ void CadworkFlyMotionModel::SetDefaultMappings(Keyboard* keyboard, Mouse* mouse)
 
       mStartRotatingButtonMapping->SetFirstButton(mouse->GetButton(Mouse::LeftButton));
       mStartRotatingButtonMapping->SetSecondButton(mouse->GetButton(Mouse::RightButton));
+
+      mMouseWheelUpDownMapping->SetSourceAxis(mouse->GetAxis(2));
+      mMouseWheelUpDownMapping->SetTransformationParameters(0.05,0.0);
    }
 
    SetFlyForwardBackwardAxis(mDefaultFlyForwardBackwardAxis);
@@ -357,6 +378,8 @@ void CadworkFlyMotionModel::SetDefaultMappings(Keyboard* keyboard, Mouse* mouse)
    //SetCursorGrabButton(mDefaultInputDevice->AddButton("Cursor grab button", Mouse::LeftButton, mCursorGrabButtonMapping));
 
    SetStartRotatingButton(mDefaultInputDevice->AddButton("Rotation start", Mouse::LeftButton, mStartRotatingButtonMapping));
+
+   SetDistanceAxis(mDefaultInputDevice->AddAxis("mouse wheel camera zoom",mMouseWheelUpDownMapping));
 }
 
 /**
@@ -491,6 +514,19 @@ void CadworkFlyMotionModel::SetStartRotatingButton( LogicalButton *b)
    }
 }
 
+void CadworkFlyMotionModel::SetDistanceAxis(LogicalAxis* distance)
+{
+   if(mDistanceAxis)
+   {
+      mDistanceAxis->RemoveAxisHandler(this);
+   }
+   mDistanceAxis = distance;
+   if(mDistanceAxis)
+   {
+      mDistanceAxis->AddAxisHandler(this);
+   }
+}
+
 /**
  * Returns the axis that turns the target up (for positive values)
  * or down (for negative values).
@@ -585,6 +621,45 @@ void  CadworkFlyMotionModel::SetTarget(Transformable* target, bool computeHomePo
       GoToHomePosition();
    }
 }
+
+/**
+ * Sets ne camera center via look at. It doesn't move the camera but
+ * instead it turns it around its axis.
+ * @param lookAt new point to look at.
+ */
+void CadworkFlyMotionModel::SetCenterPoint(osg::Vec3& lookAt)
+{
+   Transform trans;
+   GetTarget()->GetTransform(trans);
+   trans.Set(trans.GetTranslation(), lookAt, osg::Vec3(0.0,0.0,1.0)/*trans.GetUpVector()*/);
+   GetTarget()->SetTransform(trans);
+}
+
+/**
+ * Get what would be a distance from focal point after zoom.
+ * It's used as a target distance for smooth interpolation
+ * when zooming (by mouse wheel).
+ *
+ * @param delta - delta parametr from HandleAxisStateChanged.
+ */
+float CadworkFlyMotionModel::GetDistanceAfterZoom(double delta)
+{
+   delta = delta;
+   float dist = GetDistance();
+   float distDelta = -float(delta * dist * mLinearRate);
+   if(delta < 0) // backward motion
+   {
+      //distDelta += (mHomePosition.eye - mHomePosition.center).length()/20.0;
+      //distDelta *= 1.2;
+      distDelta = -float(delta * (dist/(1-(-delta* mLinearRate))) * mLinearRate);
+   }
+   if (dist + distDelta < MIN_DISTANCE)
+   {
+      distDelta = MIN_DISTANCE - dist;
+   }
+   return GetDistance()+distDelta;
+}
+
 /**
  * Called when an axis' state has changed.
  *
@@ -599,13 +674,15 @@ bool CadworkFlyMotionModel::HandleAxisStateChanged(const dtCore::Axis* axis,
                                        double newState,
                                        double delta)
 {
+   if(!IsEnabled()) return false;
    if(!HasOption(OPTION_REQUIRE_MOUSE_DOWN)) return false;
+   if(mStartRotatingButton->GetState() == false) return false;
 
    double deltaState = newState - oldState;
-   Transform transform;
+   Transform trans;
    osg::Vec3 hpr;
-   GetTarget()->GetTransform(transform);
-   transform.GetRotation(hpr);
+   GetTarget()->GetTransform(trans);
+   trans.GetRotation(hpr);
 
    if(axis == mDefaultTurnLeftRightAxis)
    {
@@ -614,43 +691,71 @@ bool CadworkFlyMotionModel::HandleAxisStateChanged(const dtCore::Axis* axis,
 
 
          // rotation
-      if(mRotationLRStartState<0.0f)
-      {
-         mRotationLRStartState = newState;
-      }
-      else
-      {
-         hpr[0] -= float(mMaximumTurnSpeed * deltaState);
-      }
-         
-         
+    
+      hpr[0] -= float(mMaximumTurnSpeed * deltaState);              
    }
    if(axis == mDefaultTurnUpDownAxis)
    {
-      /*if(mRotationUDStartState<0.0f)
+      float rotateTo = hpr[1] + float(mMaximumTurnSpeed * deltaState);
+
+      if (rotateTo < -89.5f)
       {
-         mRotationUDStartState = newState;
+         hpr[1] = -89.5f;
+      }
+      else if (rotateTo > 89.5f)
+      {
+         hpr[1] = 89.5f;
       }
       else
       {
-         float rotateTo = hpr[1] + float(mMaximumTurnSpeed * deltaState);
-
-         if (rotateTo < -89.5f)
-         {
-            hpr[1] = -89.5f;
-         }
-         else if (rotateTo > 89.5f)
-         {
-            hpr[1] = 89.5f;
-         }
-         else
-         {
-            hpr[1] = rotateTo;
-         }
-      }*/
+         hpr[1] = rotateTo;
+      }
    }
-   transform.SetRotation(hpr);
-   GetTarget()->SetTransform(transform);
+   if(axis == mDistanceAxis)
+   {
+      dtCore::Camera *camera = dynamic_cast<dtCore::Camera *> (GetTarget());
+      if(camera)
+      {
+         if(delta>0) //zoom in we want to focus on point uder cursor
+         {
+            osg::Vec3 xyz,nearPoint,farPoint,hitPoint;
+            float x=0, y=0;
+            //float win_x, win_y;
+            GetMouse()->GetPosition(x,y);
+            osg::Quat quat;
+            trans.GetRotation(quat);
+            trans.GetTranslation(xyz);
+            mAnimData._fromRotation = quat;
+            mAnimData._fromCursor.set(x,y);
+            mAnimData._toCursor.set(0.0,0.0);
+
+            SSPick(x,y);
+            if(mLineIntersector->containsIntersections())
+            {
+               hitPoint = mLineIntersector->getFirstIntersection().getWorldIntersectPoint();
+               SetCenterPoint(hitPoint);
+               camera->GetTransform(trans);
+               trans.GetRotation(quat);
+               mAnimData._toRotation = quat;//get ending rotation
+               mAnimData._isRotating = true; //set zooming flag
+               
+
+
+               /** Now the hitpoint is our new center so we need to recalculate current distance
+                     for zooming and other purposses. */
+               //SetDistance( (xyz - hitPoint).length());
+               mAnimData._fromDist = (xyz - hitPoint).length();
+               mAnimData._toDist = GetDistanceAfterZoom(delta);
+               mAnimData._isZooming = true;
+
+               mAnimData._startTime = System::GetInstance().GetSimulationTime();
+            }
+         }
+      }
+      return true;
+   }
+   trans.SetRotation(hpr);
+   GetTarget()->SetTransform(trans);
 
    return false;
 }
@@ -910,6 +1015,46 @@ void CadworkFlyMotionModel::GrabMouse()
    }
    if(HasOption(OPTION_HIDE_CURSOR))
       ShowCursor(false);
+}
+
+void CadworkFlyMotionModel::SSPick(float x, float y)
+{
+   //osg::Vec3 nearPoint,farPoint; //hitpoint will be our new center
+   Camera *camera = dynamic_cast<Camera *>(GetTarget());
+   if(!camera) return;
+
+   //mouse position
+   float win_x, win_y;
+   mMouse->GetPosition(x,y);
+   camera->GetWindow()->CalcPixelCoords(x,y,win_x, win_y);
+
+   //computing pick line
+   /*osg::Matrix VPW =camera->GetOSGCamera()->getViewMatrix() * camera->GetOSGCamera()->getProjectionMatrix() * camera->GetOSGCamera()->getViewport()->computeWindowMatrix();
+   osg::Matrix inverseVPW;
+   inverseVPW.invert(VPW);
+   nearPoint.set(win_x,win_y, 0.0f);
+   farPoint.set(win_x,win_y, 1.0f);
+   nearPoint=nearPoint*inverseVPW;
+   farPoint=farPoint*inverseVPW;*/
+
+
+   //actual picking
+   //mLineIntersector->reset();
+   osg::Viewport *vp = camera->GetOSGCamera()->getViewport();
+   osgUtil::LineSegmentIntersector::CoordinateFrame cf;
+   if( vp ) {
+        cf = osgUtil::Intersector::WINDOW;
+        x *= vp->width();
+        y *= vp->height();
+    } else
+        cf = osgUtil::Intersector::PROJECTION;
+   mLineIntersector = new osgUtil::LineSegmentIntersector(cf, win_x, win_y);
+   mIntersectionVisitor->setIntersector(mLineIntersector);
+   //mLineIntersector->setStart(nearPoint);
+   //mLineIntersector->setEnd(farPoint);
+   
+   //run intersection visitor
+   camera->GetOSGCamera()->accept(*mIntersectionVisitor);
 }
 
 /***********CadworkMotionModelInterface**************/

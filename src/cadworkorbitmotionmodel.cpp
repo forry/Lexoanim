@@ -289,23 +289,11 @@ bool CadworkOrbitMotionModel::HandleAxisStateChanged(const Axis* axis,
                mAnimData._fromRotation = rotmat.getRotate(); //get starting rotation
                startingFocal = GetFocalPoint(); //storing focal point for later restore
 
-               //computing pick line
-               /*osg::Matrix VPW =camera->GetOSGCamera()->getViewMatrix() * camera->GetOSGCamera()->getProjectionMatrix() * camera->GetOSGCamera()->getViewport()->computeWindowMatrix();
-               osg::Matrix inverseVPW;
-               inverseVPW.invert(VPW);
-               nearPoint.set(win_x,win_y, 0.0f);
-               farPoint.set(win_x,win_y, 1.0f);
-               nearPoint=nearPoint*inverseVPW;
-               farPoint=farPoint*inverseVPW;*/
-
                mAnimData._fromCursor.set(x,y);
                mAnimData._toCursor.set(0.0,0.0);
 
                //actual picking
-               /*mRay->Reset();
-               mRay->SetStartPosition(nearPoint);
-               mRay->SetDirection(farPoint-nearPoint);
-               mRay->Update();*/
+               
                SSPick(x,y);
                if(mLineIntersector->containsIntersections())
                {

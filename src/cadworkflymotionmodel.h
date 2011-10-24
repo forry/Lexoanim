@@ -33,9 +33,16 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace osgUtil
+{
+   class LineSegmentIntersector;
+   class IntersectionVisitor;
+}
+
 namespace dtCore
 {
    class Axis;
+   class AxisToAxis;
    class ButtonAxisToAxis;
    class ButtonsToAxis;
    class Keyboard;
@@ -54,6 +61,8 @@ namespace dtCore
       DECLARE_MANAGEMENT_LAYER(CadworkFlyMotionModel)
 
       public:
+
+         static const float MIN_DISTANCE;
 
          ///Set of options to configure how FlyMotionModel behaves.
          enum BehaviorOptions
@@ -263,10 +272,16 @@ namespace dtCore
          virtual void SetStartRotatingButton( LogicalButton *b);
          inline virtual LogicalButton *GetStartRotatingButton(){ return mStartRotatingButton;}
 
+         virtual void SetDistanceAxis(LogicalAxis* distance);
+         inline virtual LogicalAxis* GetDistanceAxis(){ return mDistanceAxis;}
+
          inline virtual void SetOptions (unsigned int opt) { mOptions = opt; }
 
          //inline virtual void SetMouseGrabbed(bool v=true) {mMouseGrabbed = v; }
          inline virtual bool IsMouseGrabbed() { return mMouseGrabbed;}
+
+         /** @return Reterns mouse device supplied in constructor */
+         inline virtual Mouse *GetMouse(){ return mMouse;}
 
          virtual void ReleaseMouse();
          virtual void GrabMouse();
@@ -279,6 +294,13 @@ namespace dtCore
           * @param target the new target
           */
          virtual void SetTarget(Transformable* target, bool computeHomePos = false);
+
+         /**
+          * Sets ne camera center via look at. It doesn't move the camera but
+          * instead it turns it around its axis.
+          * @param lookAt new point to look at.
+          */
+         virtual void SetCenterPoint(osg::Vec3& lookAt);
 
          /**
           * Called when an axis' state has changed.
@@ -325,6 +347,12 @@ namespace dtCore
          double GetTimeDelta(const MessageData* data) const;
          osg::Vec3 Rotate(const osg::Vec3& hpr, double delta, bool& changed) const;
          osg::Vec3 Translate(const osg::Vec3& xyz, double delta, bool& changed) const;
+         virtual float GetDistanceAfterZoom(double delta);
+         /**
+          * Screen Space Pick
+          */
+         virtual void SSPick(float x, float y);
+
 
       private:
 
@@ -382,6 +410,11 @@ namespace dtCore
          ButtonsToAxis* mQEKeysUpDownMappingCaps;
 
          /**
+          * The mouse wheel up/down scroll mapping.
+          */
+         AxisToAxis* mMouseWheelUpDownMapping;
+
+         /**
           * The space key homing button
           */
          Button *mHomingButton;
@@ -429,6 +462,8 @@ namespace dtCore
           * The default turn up/down axis.
           */
          LogicalAxis* mDefaultTurnUpDownAxis;
+
+         LogicalAxis* mDistanceAxis;
 
          /**
           * The axis that moves the target forwards or backwards.
@@ -478,6 +513,12 @@ namespace dtCore
            * only waits for clicking into scene, so he could grab it again.
            */
          bool mMouseGrabbed;
+
+         /** Ray intersector for picking (on distance axis state change) */
+         RefPtr<osgUtil::LineSegmentIntersector> mLineIntersector;
+         RefPtr<osgUtil::IntersectionVisitor> mIntersectionVisitor;
+
+         AnimationData mAnimData;
 
    };
 } // namespace dtCore
