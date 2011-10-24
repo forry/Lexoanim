@@ -1,0 +1,27 @@
+<RCC>
+    <qresource>
+        <file>images/Lexolights.png</file>
+        <file>images/arc_rotate.png</file>
+        <file>images/axo.png</file>
+        <file>images/birot.png</file>
+        <file>images/rotate.png</file>
+        <file>images/rotate_h.png</file>
+        <file>images/rotate_v.png</file>
+        <file>images/look_cur.png</file>
+        <file>images/default_view.png</file>
+        <file>images/sun.png</file>
+        <file>images/first_person.xpm</file>
+        <file>images/orbiting.xpm</file>
+        <file>images/axis.png</file>
+        <file>images/shadow.xpm</file>
+        <file>images/load_view.png</file>
+        <file>images/save_view.png</file>
+        <file>images/zoom_all.xpm</file>
+        <file>images/flashlight.png</file>
+        <file>images/bulbOn.png</file>
+        <file>images/bulbOff.png</file>
+        <file>images/open.xpm</file>
+        <file>images/povray.png</file>
+        <file>images/reload.xpm</file>
+    </qresource>
+</RCC>

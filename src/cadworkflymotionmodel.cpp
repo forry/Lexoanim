@@ -56,6 +56,9 @@ CadworkFlyMotionModel::CadworkFlyMotionModel(Keyboard* keyboard, Mouse* mouse, u
    , mMouse(mouse)
    , mOptions(options)
    , mMouseGrabbed(true)
+   , mStartRotatingButton(NULL)
+   , mRotationLRStartState(-1.0f)
+   , mRotationUDStartState(-1.0f)
 {
 
    RegisterInstance(this);
@@ -95,7 +98,7 @@ void CadworkFlyMotionModel::SetDefaultMappings(Keyboard* keyboard, Mouse* mouse)
 
       if (HasOption(OPTION_REQUIRE_MOUSE_DOWN))
       {
-         leftButtonUpAndDown = mDefaultInputDevice->AddAxis(
+         /*leftButtonUpAndDown = mDefaultInputDevice->AddAxis(
             "left mouse button up/down",
             mLeftButtonUpDownMapping = new ButtonAxisToAxis(
                mouse->GetButton(Mouse::LeftButton),
@@ -108,6 +111,15 @@ void CadworkFlyMotionModel::SetDefaultMappings(Keyboard* keyboard, Mouse* mouse)
                mouse->GetButton(Mouse::LeftButton),
                mouse->GetAxis(0)
             )
+         );*/
+         leftButtonUpAndDown = mDefaultInputDevice->AddAxis(
+            "left mouse movement up/down",
+            new AxisToAxis(mouse->GetAxis(1))
+         );
+
+         leftButtonLeftAndRight = mDefaultInputDevice->AddAxis(
+            "left mouse movement left/right",
+            new AxisToAxis(mouse->GetAxis(0))
          );
       }
       else
@@ -171,15 +183,16 @@ void CadworkFlyMotionModel::SetDefaultMappings(Keyboard* keyboard, Mouse* mouse)
       {
          mDefaultTurnLeftRightAxis = mDefaultInputDevice->AddAxis(
             "default turn left/right",
-            new AxisToAxis(mouse->GetAxis(0))
+             leftButtonLeftAndRight
             );
 
          mDefaultTurnUpDownAxis = mDefaultInputDevice->AddAxis(
             "default turn up/down",
-            new AxisToAxis(mouse->GetAxis(1))
+            leftButtonUpAndDown
             );
       }
 
+      
       Axis* wsKeysUpAndDown = mDefaultInputDevice->AddAxis(
          "w/s keys stafe forward/back",
          mWSKeysUpDownMapping = new ButtonsToAxis(
@@ -250,9 +263,15 @@ void CadworkFlyMotionModel::SetDefaultMappings(Keyboard* keyboard, Mouse* mouse)
          keyboard->GetButton(osgGA::GUIEventAdapter::KEY_Control_R)
          );
 
-      mCursorGrabButtonMapping = new ButtonsToButton(
+      /*mCursorGrabButtonMapping = new ButtonsToButton(
          mouse->GetButton(Mouse::LeftButton),
          mouse->GetButton(Mouse::RightButton)
+         );*/
+
+      mStartRotatingButtonMapping = new ButtonsToButton(
+         mouse->GetButton(Mouse::LeftButton),
+         mouse->GetButton(Mouse::RightButton),
+         ButtonsToButton::SINGLE_BUTTON
          );
    }
    else
@@ -314,8 +333,11 @@ void CadworkFlyMotionModel::SetDefaultMappings(Keyboard* keyboard, Mouse* mouse)
       mCursorReleaseButtonMapping->SetFirstButton(keyboard->GetButton(osgGA::GUIEventAdapter::KEY_Control_L));
       mCursorReleaseButtonMapping->SetSecondButton(keyboard->GetButton(osgGA::GUIEventAdapter::KEY_Control_R));
 
-      mCursorGrabButtonMapping->SetFirstButton(mouse->GetButton(Mouse::LeftButton));
-      mCursorGrabButtonMapping->SetSecondButton(mouse->GetButton(Mouse::RightButton));
+      /*mCursorGrabButtonMapping->SetFirstButton(mouse->GetButton(Mouse::LeftButton));
+      mCursorGrabButtonMapping->SetSecondButton(mouse->GetButton(Mouse::RightButton));*/
+
+      mStartRotatingButtonMapping->SetFirstButton(mouse->GetButton(Mouse::LeftButton));
+      mStartRotatingButtonMapping->SetSecondButton(mouse->GetButton(Mouse::RightButton));
    }
 
    SetFlyForwardBackwardAxis(mDefaultFlyForwardBackwardAxis);
@@ -332,7 +354,9 @@ void CadworkFlyMotionModel::SetDefaultMappings(Keyboard* keyboard, Mouse* mouse)
 
    SetCursorReleaseButton(mDefaultInputDevice->AddButton("Cursor release button", osgGA::GUIEventAdapter::KEY_Control_L, mCursorReleaseButtonMapping));
    
-   SetCursorGrabButton(mDefaultInputDevice->AddButton("Cursor grab button", Mouse::LeftButton, mCursorGrabButtonMapping));
+   //SetCursorGrabButton(mDefaultInputDevice->AddButton("Cursor grab button", Mouse::LeftButton, mCursorGrabButtonMapping));
+
+   SetStartRotatingButton(mDefaultInputDevice->AddButton("Rotation start", Mouse::LeftButton, mStartRotatingButtonMapping));
 }
 
 /**
@@ -408,7 +432,15 @@ const Axis* CadworkFlyMotionModel::GetFlyUpDownAxis() const
  */
 void CadworkFlyMotionModel::SetTurnLeftRightAxis(Axis* turnLeftRightAxis)
 {
+   if (mTurnLeftRightAxis)
+   {
+      mTurnLeftRightAxis->RemoveAxisHandler(this);
+   }
    mTurnLeftRightAxis = turnLeftRightAxis;
+   if (mTurnLeftRightAxis)
+   {
+      mTurnLeftRightAxis->AddAxisHandler(this);
+   }
 }
 
 /**
@@ -435,7 +467,28 @@ const Axis* CadworkFlyMotionModel::GetTurnLeftRightAxis() const
  */
 void CadworkFlyMotionModel::SetTurnUpDownAxis(Axis* turnUpDownAxis)
 {
+   if (mTurnUpDownAxis)
+   {
+      mTurnUpDownAxis->RemoveAxisHandler(this);
+   }
    mTurnUpDownAxis = turnUpDownAxis;
+   if (mTurnUpDownAxis)
+   {
+      mTurnUpDownAxis->AddAxisHandler(this);
+   }
+}
+
+void CadworkFlyMotionModel::SetStartRotatingButton( LogicalButton *b)
+{ 
+   if(mStartRotatingButton)
+   {
+      mStartRotatingButton->RemoveButtonHandler(this);
+   }
+   mStartRotatingButton = b;
+   if(mStartRotatingButton)
+   {
+      mStartRotatingButton->AddButtonHandler(this);
+   }
 }
 
 /**
@@ -532,6 +585,88 @@ void  CadworkFlyMotionModel::SetTarget(Transformable* target, bool computeHomePo
       GoToHomePosition();
    }
 }
+/**
+ * Called when an axis' state has changed.
+ *
+ * @param axis the changed axis
+ * @param oldState the old state of the axis
+ * @param newState the new state of the axis
+ * @param delta a delta value indicating stateless motion
+ * @return If the
+ */
+bool CadworkFlyMotionModel::HandleAxisStateChanged(const dtCore::Axis* axis,
+                                       double oldState,
+                                       double newState,
+                                       double delta)
+{
+   if(!HasOption(OPTION_REQUIRE_MOUSE_DOWN)) return false;
+
+   double deltaState = newState - oldState;
+   Transform transform;
+   osg::Vec3 hpr;
+   GetTarget()->GetTransform(transform);
+   transform.GetRotation(hpr);
+
+   if(axis == mDefaultTurnLeftRightAxis)
+   {
+       // Get the time change (sim time or real time)
+
+
+
+         // rotation
+      if(mRotationLRStartState<0.0f)
+      {
+         mRotationLRStartState = newState;
+      }
+      else
+      {
+         hpr[0] -= float(mMaximumTurnSpeed * deltaState);
+      }
+         
+         
+   }
+   if(axis == mDefaultTurnUpDownAxis)
+   {
+      /*if(mRotationUDStartState<0.0f)
+      {
+         mRotationUDStartState = newState;
+      }
+      else
+      {
+         float rotateTo = hpr[1] + float(mMaximumTurnSpeed * deltaState);
+
+         if (rotateTo < -89.5f)
+         {
+            hpr[1] = -89.5f;
+         }
+         else if (rotateTo > 89.5f)
+         {
+            hpr[1] = 89.5f;
+         }
+         else
+         {
+            hpr[1] = rotateTo;
+         }
+      }*/
+   }
+   transform.SetRotation(hpr);
+   GetTarget()->SetTransform(transform);
+
+   return false;
+}
+
+bool CadworkFlyMotionModel::HandleButtonStateChanged(const Button* button, bool oldState, bool newState)
+{
+   if(button == mStartRotatingButton)
+   {
+      if(newState == false){
+         mRotationLRStartState = -1.0f;
+         mRotationUDStartState = -1.0f;
+         
+      }
+   }
+   return false;
+}
 
 /**
  * Message handler callback.
@@ -561,10 +696,13 @@ void CadworkFlyMotionModel::OnMessage(MessageData* data)
          // rotation
 
          bool rotationChanged = false;
-         hpr = Rotate(hpr, delta, rotationChanged);
-         if (rotationChanged)
+         if(!HasOption(OPTION_REQUIRE_MOUSE_DOWN))
          {
-            transform.SetRotation(hpr);
+            hpr = Rotate(hpr, delta, rotationChanged);
+            if (rotationChanged)
+            {
+               transform.SetRotation(hpr);
+            }
          }
 
          // translation
@@ -593,15 +731,15 @@ void CadworkFlyMotionModel::OnMessage(MessageData* data)
          }
       }
       // release cursor
-      if(mCursorReleaseButton->GetState())
-      {
-         ReleaseMouse();
-      }
-      //grab cursor
-      if(mCursorGrabButton->GetState())
-      {
-         GrabMouse();
-      }
+      //if(mCursorReleaseButton->GetState())
+      //{
+      //   ReleaseMouse();
+      //}
+      ////grab cursor
+      //if(mCursorGrabButton->GetState())
+      //{
+      //   GrabMouse();
+      //}
    }
 }
 
@@ -753,17 +891,25 @@ void CadworkFlyMotionModel::GoToHomePosition()
 
 void CadworkFlyMotionModel::ReleaseMouse()
 {
-   SetOptions(mOptions & ~OPTION_RESET_MOUSE_CURSOR);
-   mMouseGrabbed = false;
-   ShowCursor(true);
+   if(HasOption(OPTION_RESET_MOUSE_CURSOR))
+   {
+      SetOptions(mOptions & ~OPTION_RESET_MOUSE_CURSOR);
+      mMouseGrabbed = false;
+   }
+   if(HasOption(OPTION_HIDE_CURSOR))
+      ShowCursor(true);
 }
 
 void CadworkFlyMotionModel::GrabMouse()
 {
-   SetOptions(mOptions| OPTION_RESET_MOUSE_CURSOR);
-   mMouse->SetPosition(0.0,0.0);
-   mMouseGrabbed = true;
-   ShowCursor(false);
+   if(HasOption(OPTION_RESET_MOUSE_CURSOR))
+   {
+      SetOptions(mOptions & ~OPTION_RESET_MOUSE_CURSOR);
+      mMouse->SetPosition(0.0,0.0);
+      mMouseGrabbed = true;
+   }
+   if(HasOption(OPTION_HIDE_CURSOR))
+      ShowCursor(false);
 }
 
 /***********CadworkMotionModelInterface**************/

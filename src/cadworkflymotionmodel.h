@@ -26,6 +26,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #include <dtCore/motionmodel.h>
+#include <dtCore/axishandler.h>
+#include <dtCore/buttonhandler.h>
 #include "CameraHomer.h"
 #include "CadworkMotionModelInterface.h"
 
@@ -47,7 +49,7 @@ namespace dtCore
    /**
     * A motion model that simulates the action of flying.
     */
-   class CadworkFlyMotionModel : public MotionModel, public CameraHomer, virtual public CadworkMotionModelInterface
+   class CadworkFlyMotionModel : public MotionModel, public AxisHandler, public ButtonHandler, public CameraHomer, virtual public CadworkMotionModelInterface
    {
       DECLARE_MANAGEMENT_LAYER(CadworkFlyMotionModel)
 
@@ -77,6 +79,12 @@ namespace dtCore
              * in response to pressing the cursor keys.
              */
             OPTION_USE_CURSOR_KEYS       = 0x8,
+
+            /**
+             * Indicates whether this motion model will hide cursor when
+             * it's grabed (when using it to fly).
+             */
+            OPTION_HIDE_CURSOR           = 0x10,
 
             /** Default setup of options (OPTION_USE_SIMTIME_FOR_SPEED,
              *   OPTION_USE_CURSOR_KEYS, OPTION_REQUIRE_MOUSE_DOWN).
@@ -252,6 +260,9 @@ namespace dtCore
          inline virtual void SetCursorGrabButton( LogicalButton *b){ mCursorGrabButton = b;}
          inline virtual LogicalButton *GetCursorGrabButton(){ return mCursorGrabButton;}
 
+         virtual void SetStartRotatingButton( LogicalButton *b);
+         inline virtual LogicalButton *GetStartRotatingButton(){ return mStartRotatingButton;}
+
          inline virtual void SetOptions (unsigned int opt) { mOptions = opt; }
 
          //inline virtual void SetMouseGrabbed(bool v=true) {mMouseGrabbed = v; }
@@ -268,6 +279,30 @@ namespace dtCore
           * @param target the new target
           */
          virtual void SetTarget(Transformable* target, bool computeHomePos = false);
+
+         /**
+          * Called when an axis' state has changed.
+          *
+          * @param axis the changed axis
+          * @param oldState the old state of the axis
+          * @param newState the new state of the axis
+          * @param delta a delta value indicating stateless motion
+          * @return If the
+          */
+         virtual bool HandleAxisStateChanged(const dtCore::Axis* axis,
+                                       double oldState,
+                                       double newState,
+                                       double delta);
+
+         /**
+          * Called when a button's state has changed.
+          *
+          * @param button the origin of the event
+          * @param oldState the old state of the button
+          * @param newState the new state of the button
+          * @return whether this handler handled the state change or not
+          */
+         virtual bool HandleButtonStateChanged(const Button* button, bool oldState, bool newState);
 
          /**
           * Message handler callback.
@@ -362,6 +397,13 @@ namespace dtCore
           */
          ButtonsToButton *mCursorGrabButtonMapping;
          LogicalButton *mCursorGrabButton;
+
+         /**
+          * Start rotating
+          */
+         ButtonsToButton *mStartRotatingButtonMapping;
+         LogicalButton *mStartRotatingButton;
+         float mRotationLRStartState,mRotationUDStartState;
 
          /**
           * The default fly forward/backward axis.

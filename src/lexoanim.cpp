@@ -23,9 +23,9 @@ void LexoanimApp::Config(){
    //mCadworkOrbitMotionModel->SetTarget(GetCamera());
    mCadworkOrbitMotionModel->SetEnabled(false);
 
-   mCadworkFlyMotionModel = new dtCore::CadworkFlyMotionModel(GetKeyboard(), GetMouse(), dtCore::CadworkFlyMotionModel::OPTION_REQUIRE_MOUSE_DOWN |  dtCore::CadworkFlyMotionModel::OPTION_USE_SIMTIME_FOR_SPEED | dtCore::CadworkFlyMotionModel::OPTION_RESET_MOUSE_CURSOR);
+   mCadworkFlyMotionModel = new dtCore::CadworkFlyMotionModel(GetKeyboard(), GetMouse(), dtCore::CadworkFlyMotionModel::OPTION_REQUIRE_MOUSE_DOWN |  dtCore::CadworkFlyMotionModel::OPTION_USE_SIMTIME_FOR_SPEED/* | dtCore::CadworkFlyMotionModel::OPTION_RESET_MOUSE_CURSOR*/);
    mCadworkFlyMotionModel->SetMaximumFlySpeed(10.0);
-   mCadworkFlyMotionModel->SetMaximumTurnSpeed(1800.0);
+   mCadworkFlyMotionModel->SetMaximumTurnSpeed(90.0);
    //mCadworkFlyMotionModel->SetTarget(GetCamera());
    mCadworkFlyMotionModel->SetEnabled(false);
 
