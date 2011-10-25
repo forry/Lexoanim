@@ -518,6 +518,10 @@ namespace dtCore
          RefPtr<osgUtil::LineSegmentIntersector> mLineIntersector;
          RefPtr<osgUtil::IntersectionVisitor> mIntersectionVisitor;
 
+         float mTmpPrevDistance;
+         bool  mDistanceShouldChange;
+         float mLinearRate;
+
          AnimationData mAnimData;
 
    };

@@ -111,6 +111,7 @@ namespace dtCore
       inline virtual Keyboard *GetKeyboard(){ return mKeyboard.get();}
 
       virtual void SetHomingButton(dtCore::Button *butt);
+      virtual void SetLookAtCenterButton(dtCore::Button *butt);
 
       /**
        * Called when an axis' state has changed.
@@ -223,10 +224,17 @@ namespace dtCore
        * The axis that affects the up/down translation of the orbit.
        */
       RefPtr<Axis> mUpDownTranslationAxis;
+
       /**
        * The button that returns camera to it's original (homing) position.
        */
       RefPtr<Button> mHomingButton;
+
+      /**
+       * Look to center of the model.
+       */
+      RefPtr<Button> mLookAtCenterButton;
+
       /**
        * The linear rate (ratio between axis units and linear movement).
        */
@@ -268,6 +276,14 @@ namespace dtCore
          * back here.
          */
       osg::Vec3 mStoredFocalPoint;
+
+      /**
+       * Stored distance. Used when you are zooming into void around the model.
+       * In animation loop we must decrementing actual distance, but at the end
+       * we should restore this value, for finding the right focal point in the
+       * void.
+       */
+      float mStoredDistance;
 
 
       

@@ -6,7 +6,7 @@
 #define CAMERA_HOMER
 
 #include <osg/Referenced>
-#include <osg/Vec3d>
+#include <osg/Vec3>
 
 namespace dtCore{
 
@@ -32,9 +32,9 @@ namespace dtCore{
 
    protected:
       /** Camera home position like in OSG OrbitManipulator */
-      osg::Vec3d mEye;
-      osg::Vec3d mCenter;
-      osg::Vec3d mUp;
+      osg::Vec3 mEye;
+      osg::Vec3 mCenter;
+      osg::Vec3 mUp;
 
       bool mAutoComputeHomePosition;
    };

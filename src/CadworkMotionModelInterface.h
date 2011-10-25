@@ -2,6 +2,7 @@
 #define CADWORK_MOTION_MODEL_INTERFACE
 
 #include <osgAnimation/EaseMotion>
+#include <osg/Vec2>
 
 class CadworkMotionModelInterface
 {
@@ -14,7 +15,7 @@ public:
 
             AnimationData():_isRotating(false), _isZooming(false), _startTime(0.0), _previousPhase(0.0), _interpolateCursor(true),
                _fromCursor(osg::Vec2(0.0,0.0)), _toCursor(osg::Vec2(0.0,0.0)),
-               _motion(new osgAnimation::MathMotionTemplate<osgAnimation::OutQuartFunction>(0,0.4,1,osgAnimation::Motion::CLAMP)){}
+               _motion(new osgAnimation::MathMotionTemplate<osgAnimation::OutQuartFunction>(0,0.4f,1,osgAnimation::Motion::CLAMP)){}
 
             AnimationData(double durationTime):
                _isRotating(false), _isZooming(false), _startTime(0.0), _previousPhase(0.0), _interpolateCursor(true),

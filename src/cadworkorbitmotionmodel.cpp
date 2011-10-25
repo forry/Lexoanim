@@ -153,6 +153,7 @@ void CadworkOrbitMotionModel::SetDefaultMappings(Keyboard* keyboard, Mouse* mous
 
    /** Seting up the OSG functionality: When space is pressed the camera resets to homing position (computed as in OSG) */
    SetHomingButton(mDefaultInputDevice->AddButton("Homing button", keyboard->GetButton(' '), ' '));
+   SetLookAtCenterButton(mDefaultInputDevice->AddButton("Points camera to center of the scene", keyboard->GetButton('l'), 'l'));
 }
 
 /**
@@ -214,6 +215,20 @@ void CadworkOrbitMotionModel::SetHomingButton(dtCore::Button *butt){
    if (mHomingButton.valid())
    {
       mHomingButton->AddButtonHandler(this);
+   }
+}
+
+void CadworkOrbitMotionModel::SetLookAtCenterButton(dtCore::Button *butt){
+   if (mLookAtCenterButton.valid())
+   {
+      mLookAtCenterButton->RemoveButtonHandler(this);
+   }
+
+   mLookAtCenterButton = butt;
+
+   if (mLookAtCenterButton.valid())
+   {
+      mLookAtCenterButton->AddButtonHandler(this);
    }
 }
 
@@ -325,7 +340,20 @@ bool CadworkOrbitMotionModel::HandleAxisStateChanged(const Axis* axis,
                      the mode, but we still want to look and zoom in that direction. */
 
                   mDistanceShouldChange = false;
+                  mStoredDistance = GetDistance();
+                  osg::Matrix VPW =camera->GetOSGCamera()->getViewMatrix() * 
+                  camera->GetOSGCamera()->getProjectionMatrix() * 
+                  camera->GetOSGCamera()->getViewport()->computeWindowMatrix();
+                  osg::Matrix inverseVPW;
+                  inverseVPW.invert(VPW);
+                  float win_x,win_y;
+                  camera->GetWindow()->CalcPixelCoords(x,y,win_x, win_y);
+                  farPoint.set(win_x,win_y, 0.0f);
+                  farPoint=farPoint*inverseVPW;
+                  Log::notice()<<"farpoint : "<<farPoint<<Log::endm;
+                  //farPoint.normalize();
                   SetCenterPoint(farPoint);
+                  mNewCenter = GetFocalPoint();
                   camera->GetTransform(trans);
                   trans.GetRotation(rotmat);
                   mAnimData._toRotation = rotmat.getRotate();//get ending rotation
@@ -337,6 +365,8 @@ bool CadworkOrbitMotionModel::HandleAxisStateChanged(const Axis* axis,
                   mAnimData._isZooming = true;
                   mAnimData._startTime = System::GetInstance().GetSimulationTime();
 
+                  /*trans.SetRotation(mAnimData._fromRotation);
+                  camera->SetTransform(trans);*/
                   SetCenterPoint(startingFocal);
                }
             }
@@ -363,6 +393,10 @@ bool CadworkOrbitMotionModel::HandleButtonStateChanged(const Button* button, boo
       if(button == mHomingButton.get())
       {
          GoToHomePosition();
+      }
+      else if(button == mLookAtCenterButton.get())
+      {
+         SetCenterPoint(mCenter);
       }
       return true;
    }
@@ -420,7 +454,7 @@ void CadworkOrbitMotionModel::OnMessage(MessageData *data)
             dtUtil::MatrixUtil::HprToMatrix(mat, hpr);
             translation = osg::Matrix::transform3x3(translation, mat);
             xyz += translation;
-            if(mDistanceShouldChange)
+            //if(mDistanceShouldChange)
                SetDistance((mNewCenter-xyz).length());
             trans.Set(xyz,oldhpr);
          }
@@ -433,7 +467,7 @@ void CadworkOrbitMotionModel::OnMessage(MessageData *data)
             dtUtil::MatrixUtil::HprToMatrix(mat, hpr);
             translation = osg::Matrix::transform3x3(translation, mat);
             xyz += translation;
-            if(mDistanceShouldChange)
+            //if(mDistanceShouldChange)
                SetDistance(newdist);
             trans.Set(xyz,hpr);
          }
@@ -483,6 +517,10 @@ void CadworkOrbitMotionModel::OnMessage(MessageData *data)
          trans.Set(trans.GetTranslation(), mAnimData._toRotation);
          target->SetTransform(trans);*/
          mAnimData.reset(); //clear all data, set all flags on false => not animating anymore
+         if(mDistanceShouldChange == false)
+         {
+            SetDistance(mStoredDistance);            
+         }
       }
    }
 }

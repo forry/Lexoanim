@@ -16,6 +16,7 @@
 
 #include <dtUtil/bits.h>
 #include <dtUtil/mathdefines.h>
+#include <dtUtil/matrixutil.h>
 #include <dtUtil/log.h>
 
 #include <dtCore/camera.h>
@@ -63,11 +64,16 @@ CadworkFlyMotionModel::CadworkFlyMotionModel(Keyboard* keyboard, Mouse* mouse, u
    , mOptions(options)
    , mMouseGrabbed(true)
    , mStartRotatingButton(NULL)
+   , mDistanceAxis(NULL)
    , mRotationLRStartState(-1.0f)
    , mRotationUDStartState(-1.0f)
+   , mLinearRate(10.0f)
+   , mTmpPrevDistance(100.0f)
+   , mLineIntersector(new osgUtil::LineSegmentIntersector(osg::Vec3(0,0,0),osg::Vec3(0,0,0)))
 {
 
    RegisterInstance(this);
+   mIntersectionVisitor = new osgUtil::IntersectionVisitor(mLineIntersector.get());
 
    if (keyboard != NULL && mouse != NULL)
    {
@@ -644,8 +650,9 @@ void CadworkFlyMotionModel::SetCenterPoint(osg::Vec3& lookAt)
  */
 float CadworkFlyMotionModel::GetDistanceAfterZoom(double delta)
 {
+   //float mLinearRate = 1.0; //maybe later should be added as a member
    delta = delta;
-   float dist = GetDistance();
+   float dist = mAnimData._fromDist;
    float distDelta = -float(delta * dist * mLinearRate);
    if(delta < 0) // backward motion
    {
@@ -657,7 +664,7 @@ float CadworkFlyMotionModel::GetDistanceAfterZoom(double delta)
    {
       distDelta = MIN_DISTANCE - dist;
    }
-   return GetDistance()+distDelta;
+   return mAnimData._fromDist+distDelta;
 }
 
 /**
@@ -676,7 +683,6 @@ bool CadworkFlyMotionModel::HandleAxisStateChanged(const dtCore::Axis* axis,
 {
    if(!IsEnabled()) return false;
    if(!HasOption(OPTION_REQUIRE_MOUSE_DOWN)) return false;
-   if(mStartRotatingButton->GetState() == false) return false;
 
    double deltaState = newState - oldState;
    Transform trans;
@@ -684,31 +690,29 @@ bool CadworkFlyMotionModel::HandleAxisStateChanged(const dtCore::Axis* axis,
    GetTarget()->GetTransform(trans);
    trans.GetRotation(hpr);
 
-   if(axis == mDefaultTurnLeftRightAxis)
+   if(mStartRotatingButton->GetState() == true)
    {
-       // Get the time change (sim time or real time)
-
-
-
-         // rotation
-    
-      hpr[0] -= float(mMaximumTurnSpeed * deltaState);              
-   }
-   if(axis == mDefaultTurnUpDownAxis)
-   {
-      float rotateTo = hpr[1] + float(mMaximumTurnSpeed * deltaState);
-
-      if (rotateTo < -89.5f)
+      if(axis == mDefaultTurnLeftRightAxis)
       {
-         hpr[1] = -89.5f;
+         // rotation    
+         hpr[0] -= float(mMaximumTurnSpeed * deltaState);              
       }
-      else if (rotateTo > 89.5f)
+      if(axis == mDefaultTurnUpDownAxis)
       {
-         hpr[1] = 89.5f;
-      }
-      else
-      {
-         hpr[1] = rotateTo;
+         float rotateTo = hpr[1] + float(mMaximumTurnSpeed * deltaState);
+
+         if (rotateTo < -89.5f)
+         {
+            hpr[1] = -89.5f;
+         }
+         else if (rotateTo > 89.5f)
+         {
+            hpr[1] = 89.5f;
+         }
+         else
+         {
+            hpr[1] = rotateTo;
+         }
       }
    }
    if(axis == mDistanceAxis)
@@ -718,6 +722,13 @@ bool CadworkFlyMotionModel::HandleAxisStateChanged(const dtCore::Axis* axis,
       {
          if(delta>0) //zoom in we want to focus on point uder cursor
          {
+            osg::Matrix VPW =camera->GetOSGCamera()->getViewMatrix() * 
+               camera->GetOSGCamera()->getProjectionMatrix() * 
+               camera->GetOSGCamera()->getViewport()->computeWindowMatrix();
+            osg::Matrix inverseVPW;
+            inverseVPW.invert(VPW);
+            float win_x,win_y;
+
             osg::Vec3 xyz,nearPoint,farPoint,hitPoint;
             float x=0, y=0;
             //float win_x, win_y;
@@ -732,6 +743,7 @@ bool CadworkFlyMotionModel::HandleAxisStateChanged(const dtCore::Axis* axis,
             SSPick(x,y);
             if(mLineIntersector->containsIntersections())
             {
+               mDistanceShouldChange = true;
                hitPoint = mLineIntersector->getFirstIntersection().getWorldIntersectPoint();
                SetCenterPoint(hitPoint);
                camera->GetTransform(trans);
@@ -745,11 +757,53 @@ bool CadworkFlyMotionModel::HandleAxisStateChanged(const dtCore::Axis* axis,
                      for zooming and other purposses. */
                //SetDistance( (xyz - hitPoint).length());
                mAnimData._fromDist = (xyz - hitPoint).length();
+               mTmpPrevDistance = mAnimData._fromDist;
                mAnimData._toDist = GetDistanceAfterZoom(delta);
                mAnimData._isZooming = true;
 
                mAnimData._startTime = System::GetInstance().GetSimulationTime();
+               trans.SetRotation(mAnimData._fromRotation);
+               camera->SetTransform(trans);
             }
+            else
+            { /** No point hit by ray, so we have our cursor pointing outside
+                  the mode, but we still want to look and zoom in that direction. */
+               mDistanceShouldChange = false;
+               osg::Matrix VPW =camera->GetOSGCamera()->getViewMatrix() * 
+                  camera->GetOSGCamera()->getProjectionMatrix() * 
+                  camera->GetOSGCamera()->getViewport()->computeWindowMatrix();
+               osg::Matrix inverseVPW;
+               inverseVPW.invert(VPW);
+               float win_x,win_y;
+               camera->GetWindow()->CalcPixelCoords(x,y,win_x, win_y);
+               farPoint.set(win_x,win_y, 1.0f);
+               farPoint=farPoint*inverseVPW;
+               farPoint.normalize();
+               SetCenterPoint(farPoint);
+
+               camera->GetTransform(trans);
+               trans.GetRotation(quat);
+               mAnimData._toRotation = quat;//get ending rotation
+               mAnimData._isRotating = true; //set zooming flag
+
+               mAnimData._fromDist = (mEye - mCenter).length()/20; //magical constant derived from the model size
+               mTmpPrevDistance = mAnimData._fromDist;
+               mAnimData._toDist = GetDistanceAfterZoom(delta);
+
+               mAnimData._isZooming = true;
+               mAnimData._startTime = System::GetInstance().GetSimulationTime();
+               
+               //SetCenterPoint(oldCenter);
+            }
+         }
+         else // zooming out no rotations or change of focus point
+         {
+            mDistanceShouldChange = true;
+            mAnimData._fromDist = mTmpPrevDistance; //trying to adjust zoom speed to previous known distance, works fine with homing position initialization
+            //mTmpPrevDistance = mAnimData._fromDist;//init
+            mAnimData._toDist = GetDistanceAfterZoom(delta);
+            mAnimData._isZooming = true;
+            mAnimData._startTime = System::GetInstance().GetSimulationTime();
          }
       }
       return true;
@@ -780,7 +834,8 @@ bool CadworkFlyMotionModel::HandleButtonStateChanged(const Button* button, bool 
  */
 void CadworkFlyMotionModel::OnMessage(MessageData* data)
 {
-   if (GetTarget() != NULL && IsEnabled() &&
+   Transformable *target = GetTarget();
+   if (target != NULL && IsEnabled() &&
       (data->message == dtCore::System::MESSAGE_POST_EVENT_TRAVERSAL/*MESSAGE_PRE_FRAME*/) &&
       // don't move if paused & using simtime for speed (since simtime will be 0 if paused)
       (!HasOption(OPTION_USE_SIMTIME_FOR_SPEED) || !System::GetInstance().GetPause()))
@@ -845,6 +900,109 @@ void CadworkFlyMotionModel::OnMessage(MessageData* data)
       //{
       //   GrabMouse();
       //}
+      /**
+       * Now some serious work. Below begins the 'animation' of the smooth camera
+       * movement while zooming (by mouse wheel). First part is rotation when refocusing
+       * and the second part is changing distance. Default animation duration is 0.4s.
+       */
+      if(mAnimData.isAnimating())
+      {
+         double f = (System::GetInstance().GetSimulationTime() - mAnimData._startTime) / mAnimData._motion->getDuration();
+         f = f<0 ? 0 : f > 1 ? 1 : f; //clamp f into a <0,1> range
+         float t;
+         mAnimData._motion->getValueInNormalizedRange(f,t); //gets normalized <0,1> linear value f and turns it into non-lineary interpolated value t also normalized (the function is defined in MathMotionTemplate constructor in AnimationData definition)
+      
+         /** handle amooth zooming */
+         if(mAnimData._isZooming)
+         {
+            float newdist;
+            newdist = t * (mAnimData._toDist - mAnimData._fromDist) + mAnimData._fromDist;
+
+            Transform trans;
+            target->GetTransform(trans);
+            if(mAnimData._isRotating) //rotating while zooming
+            {
+               osg::Vec3 xyz,hpr,oldhpr;
+               trans.Get(xyz,oldhpr);
+               trans.Set(xyz,mAnimData._toRotation);
+               trans.Get(xyz,hpr);
+
+
+               float deltaDist = mTmpPrevDistance - newdist;
+               /*if (newdist < MIN_DISTANCE && (mAnimData._toDist < mAnimData._fromDist))
+               {
+                  deltaDist = MIN_DISTANCE - GetDistance();
+               }*/
+               osg::Vec3 translation (0.0f, deltaDist, 0.0f);
+               osg::Matrix mat;
+               dtUtil::MatrixUtil::HprToMatrix(mat, hpr);
+               translation = osg::Matrix::transform3x3(translation, mat);
+               xyz += translation;
+               if(mDistanceShouldChange)                  
+                  mTmpPrevDistance = newdist;//(mNewCenter-xyz).length();
+               trans.Set(xyz,oldhpr);
+            }
+            else{ //zooming only
+               osg::Vec3 xyz,hpr;
+               trans.Get(xyz,hpr);
+               float deltaDist = mTmpPrevDistance - newdist;
+               osg::Vec3 translation (0.0f, deltaDist, 0.0f);
+               osg::Matrix mat;
+               dtUtil::MatrixUtil::HprToMatrix(mat, hpr);
+               translation = osg::Matrix::transform3x3(translation, mat);
+               xyz += translation;
+               if(mDistanceShouldChange)
+                  mTmpPrevDistance = newdist;
+               trans.Set(xyz,hpr);
+            }
+            target->SetTransform(trans);
+         }
+         
+         if(mAnimData._isRotating)
+         {
+            osg::Quat newRotation;
+            newRotation.slerp(f, mAnimData._fromRotation, mAnimData._toRotation);
+            if(f>=1.)
+            {
+               newRotation = mAnimData._toRotation;
+            }
+
+            Transform trans;
+            target->GetTransform(trans);
+            osg::Vec3 xyz;
+            trans.GetTranslation(xyz);
+            trans.Set(xyz,newRotation);
+            target->SetTransform(trans);
+
+            /** cursor interpolation */
+            if(mAnimData._interpolateCursor){
+                  float newx, newy;
+                  float x,y;
+                  mMouse->GetPosition(x,y); //get current position in case the user is moving the mouse
+                  float oldx, oldy;
+                  oldx = mAnimData._previousPhase * (mAnimData._toCursor.x() - mAnimData._fromCursor.x());
+                  oldy = mAnimData._previousPhase * (mAnimData._toCursor.y() - mAnimData._fromCursor.y());
+                  newx = f * (mAnimData._toCursor.x() - mAnimData._fromCursor.x());// + x/*mAnimData._fromCursor.x()*/;
+                  newy = f * (mAnimData._toCursor.y() - mAnimData._fromCursor.y());// + y/*mAnimData._fromCursor.y()*/;
+                  float truex, truey;
+                  truex = newx - oldx + x;
+                  truey = newy - oldy + y;
+
+                  mMouse->SetPosition(truex,truey);
+            }
+         }
+
+         mAnimData._previousPhase = f;
+
+         if(f>=1.)
+         {
+            /*Transform trans;
+            target->GetTransform(trans);
+            trans.Set(trans.GetTranslation(), mAnimData._toRotation);
+            target->SetTransform(trans);*/
+            mAnimData.reset(); //clear all data, set all flags on false => not animating anymore
+         }
+      }
    }
 }
 
@@ -987,6 +1145,7 @@ void CadworkFlyMotionModel::GoToHomePosition()
    {
       
       double dist = (mCenter - mEye).length();
+      mTmpPrevDistance = dist;
       Transform trans;
       trans.Set(mEye,mCenter,mUp);
       cam->SetTransform(trans);
