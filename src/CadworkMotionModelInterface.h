@@ -10,6 +10,10 @@ public:
    /** for setting View (loaded from .ivv files) into Motion models corectly. */
    virtual void SetViewPosition(/*osg::Matrix*/osg::Vec3 , osg::Vec3 )=0;
 
+   /** for passing distance between MMs. Useful when user zoomin with one MM and try to zoom out with the other. */
+   virtual void CMMI_SetDistance(float distance)=0;
+   virtual float CMMI_GetDistance()=0;
+
    class AnimationData {
         public:
 

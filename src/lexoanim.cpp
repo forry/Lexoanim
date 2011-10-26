@@ -41,6 +41,13 @@ void LexoanimApp::SetActualCameraMotionModel(dtCore::MotionModel * mm)
 { 
    if(!mm)
       return;
+   CadworkMotionModelInterface *actualCMMI = dynamic_cast<CadworkMotionModelInterface *> (mActualMotionModel.get());
+   CadworkMotionModelInterface *newCMMI = dynamic_cast<CadworkMotionModelInterface *> (mm);
+   if(newCMMI && actualCMMI)
+   {
+      newCMMI->CMMI_SetDistance(actualCMMI->CMMI_GetDistance());
+   }
+
    if(mActualMotionModel) // different Motins models needs diferent cals
    {
       mActualMotionModel->SetEnabled(false);

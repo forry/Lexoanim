@@ -180,7 +180,7 @@ void PerPixelLighting::convert( Node *scene, ShadowTechnique shadowTechnique )
       mp.globalAmbient = true;
 
       // perform conversion with no lights activated
-      //scene->accept( *convertVisitor );
+      scene->accept( *convertVisitor );
       ambientScene = convertVisitor->getScene();
    }
 

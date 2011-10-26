@@ -39,7 +39,7 @@ namespace dtCore
       osg::Vec3d up;
    };
 
-   class CadworkOrbitMotionModel : public dtCore::OrbitMotionModel, public dtCore::ButtonHandler, public CameraHomer, virtual public CadworkMotionModelInterface
+   class CadworkOrbitMotionModel : virtual public CadworkMotionModelInterface,  public dtCore::OrbitMotionModel, public dtCore::ButtonHandler, public CameraHomer
    {
       DECLARE_MANAGEMENT_LAYER(CadworkOrbitMotionModel)
 
@@ -141,6 +141,10 @@ namespace dtCore
 
       /** for setting View (loaded from .ivv files) into Motion models corectly. */
       virtual void SetViewPosition(/*osg::Matrix modelView*/ osg::Vec3 eye, osg::Vec3 center);
+
+      /** for passing distance between MMs. Useful when user zoomin with one MM and try to zoom out with the other. */
+      virtual void CMMI_SetDistance(float distance);
+      virtual float CMMI_GetDistance();
 
       //~CadworkMotionModelInterface
 

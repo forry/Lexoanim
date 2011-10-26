@@ -65,6 +65,7 @@ CadworkFlyMotionModel::CadworkFlyMotionModel(Keyboard* keyboard, Mouse* mouse, u
    , mMouseGrabbed(true)
    , mStartRotatingButton(NULL)
    , mDistanceAxis(NULL)
+   , mLookAtCenterButton(NULL)
    , mRotationLRStartState(-1.0f)
    , mRotationUDStartState(-1.0f)
    , mLinearRate(10.0f)
@@ -386,6 +387,8 @@ void CadworkFlyMotionModel::SetDefaultMappings(Keyboard* keyboard, Mouse* mouse)
    SetStartRotatingButton(mDefaultInputDevice->AddButton("Rotation start", Mouse::LeftButton, mStartRotatingButtonMapping));
 
    SetDistanceAxis(mDefaultInputDevice->AddAxis("mouse wheel camera zoom",mMouseWheelUpDownMapping));
+   
+   SetLookAtCenterButton(mDefaultInputDevice->AddButton("Points camera to center of the scene", keyboard->GetButton('l'), 'l'));
 }
 
 /**
@@ -610,6 +613,20 @@ void CadworkFlyMotionModel::ShowCursor(bool v)
    }
 }
 
+void CadworkFlyMotionModel::SetLookAtCenterButton(dtCore::Button *butt){
+   if (mLookAtCenterButton)
+   {
+      mLookAtCenterButton->RemoveButtonHandler(this);
+   }
+
+   mLookAtCenterButton = butt;
+
+   if (mLookAtCenterButton)
+   {
+      mLookAtCenterButton->AddButtonHandler(this);
+   }
+}
+
 /**
  * Sets the target of this motion model. Then if target is a camera
  * and the computeHomePos is true, it coumputes and sets new position
@@ -776,9 +793,9 @@ bool CadworkFlyMotionModel::HandleAxisStateChanged(const dtCore::Axis* axis,
                inverseVPW.invert(VPW);
                float win_x,win_y;
                camera->GetWindow()->CalcPixelCoords(x,y,win_x, win_y);
-               farPoint.set(win_x,win_y, 1.0f);
+               farPoint.set(win_x,win_y, 0.0f);
                farPoint=farPoint*inverseVPW;
-               farPoint.normalize();
+               //farPoint.normalize();
                SetCenterPoint(farPoint);
 
                camera->GetTransform(trans);
@@ -816,12 +833,20 @@ bool CadworkFlyMotionModel::HandleAxisStateChanged(const dtCore::Axis* axis,
 
 bool CadworkFlyMotionModel::HandleButtonStateChanged(const Button* button, bool oldState, bool newState)
 {
-   if(button == mStartRotatingButton)
+   if (GetTarget() != 0 && IsEnabled())
    {
-      if(newState == false){
-         mRotationLRStartState = -1.0f;
-         mRotationUDStartState = -1.0f;
-         
+      if(button == mStartRotatingButton)
+      {
+         if(newState == false)
+         {
+            mRotationLRStartState = -1.0f;
+            mRotationUDStartState = -1.0f;         
+         }
+      }
+      else if(button == mLookAtCenterButton)
+      {
+         SetCenterPoint(mCenter);
+         return true;
       }
    }
    return false;
@@ -1226,6 +1251,9 @@ void CadworkFlyMotionModel::SetViewPosition(/*osg::Matrix modelView*/osg::Vec3 e
    trans.Set(eye,center, osg::Vec3 (0.0,0.0,1.0));
    GetTarget()->SetTransform(trans);
 }
+
+void CadworkFlyMotionModel::CMMI_SetDistance(float distance){ mTmpPrevDistance = distance;}
+float CadworkFlyMotionModel::CMMI_GetDistance() { return mTmpPrevDistance;}
 
 /***********CadworkMotionModelInterface END **************/
 

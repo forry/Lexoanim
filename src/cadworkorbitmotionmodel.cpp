@@ -232,6 +232,15 @@ void CadworkOrbitMotionModel::SetLookAtCenterButton(dtCore::Button *butt){
    }
 }
 
+float CadworkOrbitMotionModel::CMMI_GetDistance() 
+{
+   return OrbitMotionModel::GetDistance();
+}
+
+void CadworkOrbitMotionModel::CMMI_SetDistance(float distance)
+{ 
+   SetDistance(distance);
+}
 /**
  * Sets ne camera center via look at. It doesn't move the camera but
  * instead it turns it around its axis.
@@ -394,7 +403,7 @@ bool CadworkOrbitMotionModel::HandleButtonStateChanged(const Button* button, boo
       {
          GoToHomePosition();
       }
-      else if(button == mLookAtCenterButton.get())
+      else if(button == mLookAtCenterButton)
       {
          SetCenterPoint(mCenter);
       }

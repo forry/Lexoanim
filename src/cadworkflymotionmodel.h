@@ -261,6 +261,10 @@ namespace dtCore
           */
          void SetUseSimTimeForSpeed(bool useSimTimeForSpeed);
 
+         /** for passing distance between MMs. Useful when user zoomin with one MM and try to zoom out with the other. */
+         virtual void CMMI_SetDistance(float distance);
+         virtual float CMMI_GetDistance();
+
          void ShowCursor(bool v = true);
 
          inline virtual void SetCursorReleaseButton( LogicalButton *b){mCursorReleaseButton = b;}
@@ -274,6 +278,8 @@ namespace dtCore
 
          virtual void SetDistanceAxis(LogicalAxis* distance);
          inline virtual LogicalAxis* GetDistanceAxis(){ return mDistanceAxis;}
+
+         virtual void SetLookAtCenterButton(dtCore::Button *butt);
 
          inline virtual void SetOptions (unsigned int opt) { mOptions = opt; }
 
@@ -418,6 +424,11 @@ namespace dtCore
           * The space key homing button
           */
          Button *mHomingButton;
+
+         /**
+          * Look to center of the model.
+          */
+         Button *mLookAtCenterButton;
 
          /**
           * Release mouse cursor button - for giving the cursor control bac to the user.
