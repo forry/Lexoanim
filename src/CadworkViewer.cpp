@@ -155,9 +155,12 @@ void CadworkViewer::setSceneData( osg::Node *scene, bool resetCameraPosition )
    orbitManipulator->computeHomePosition( getSceneWithCamera(), true );
    firstPersonManipulator->computeHomePosition( getSceneWithCamera(), true );
 
-   // either reset to home position or restore original position
+   // reset to home position if requested
    if( resetCameraPosition )
-      currentManipulator->home( 0. );
+   {
+      osg::ref_ptr<osgGA::GUIEventAdapter> dummyEvent = _eventQueue->createEvent();
+      currentManipulator->home( *dummyEvent, *this );
+   }
 }
 
 

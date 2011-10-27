@@ -387,6 +387,14 @@ bool CadworkOrbitMotionModel::HandleAxisStateChanged(const Axis* axis,
                mAnimData._isZooming = true;
                mAnimData._startTime = System::GetInstance().GetSimulationTime();
             }
+            if(mAnimData.isAnimating())
+            {
+               osgViewer::View *view = dynamic_cast<osgViewer::View *>(camera->GetOSGCamera()->getView());
+               if(view)
+               {
+                  view->requestContinuousUpdate(true);
+               }
+            }
          }
          return false;
       }
@@ -529,6 +537,15 @@ void CadworkOrbitMotionModel::OnMessage(MessageData *data)
          if(mDistanceShouldChange == false)
          {
             SetDistance(mStoredDistance);            
+         }
+         dtCore::Camera *camera = dynamic_cast<dtCore::Camera *>(GetTarget());
+         if(camera)
+         {
+            osgViewer::View *view = dynamic_cast<osgViewer::View *>(camera->GetOSGCamera()->getView());
+            if(view)
+            {
+               view->requestContinuousUpdate(false);
+            }
          }
       }
    }

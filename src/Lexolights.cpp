@@ -198,6 +198,19 @@ Lexolights::~Lexolights()
 }
 
 
+void Lexolights::setActiveDocument( LexolightsDocument *doc )
+{
+   g_activeDocument = doc;
+
+   // set MainWindow title
+   if( g_mainWindow )
+      if( g_activeDocument )
+         g_mainWindow->setWindowTitle( g_activeDocument->getStrippedName() + " - Lexolights" );
+      else
+         g_mainWindow->setWindowTitle( "Lexolights" );
+}
+
+
 //
 // Sources on UAC and application elevation:
 //

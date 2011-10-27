@@ -45,6 +45,7 @@
 #include <osgShadow/ShadowedScene>
 #include <osgShadow/ShadowMap>
 #include "MainWindow.h"
+#include "utils/BuildTime.h"
 #include "OSGWidget.h"
 #include "CentralContainer.h"
 #include "Lexolights.h"
@@ -233,7 +234,7 @@ void LexoanimMainWindow::loadModel(QString fileName, bool resetViewSettings )
 
    // release previous scene from memory
    // to make it available for the new scene
-   _activeDocument = NULL;
+   LexoanimQtApp::setActiveDocument(NULL);
    //Lexolights::viewer()->setSceneData( NULL, false );
    ///Delta3D
    /** nefunguje spravne, pozdeji pridana scena se prida k te "odebrane" 
@@ -256,12 +257,12 @@ void LexoanimMainWindow::loadModel(QString fileName, bool resetViewSettings )
       {
          // set new active document
          // and re-connect document's sceneChanged signal
-         if( _activeDocument )
-            disconnect( _activeDocument, SIGNAL( sceneChanged() ),
+         if( LexoanimQtApp::activeDocument() )
+            disconnect( LexoanimQtApp::activeDocument(), SIGNAL( sceneChanged() ),
                         this, SLOT( activeDocumentSceneChanged() ) );
-         _activeDocument = newDocument;
-         if( _activeDocument )
-            connect( _activeDocument, SIGNAL( sceneChanged() ),
+         LexoanimQtApp::setActiveDocument(newDocument);
+         if( LexoanimQtApp::activeDocument() )
+            connect( LexoanimQtApp::activeDocument(), SIGNAL( sceneChanged() ),
                      this, SLOT( activeDocumentSceneChanged() ) );
 
          // re-enable PPL (Per-Pixel Lighting), if required
@@ -345,9 +346,9 @@ void LexoanimMainWindow::loadModel(QString fileName, bool resetViewSettings )
    }
 
    // reset camera position if requested and not already done
-   if( resetViewSettings && !ok ){
+   /*if( resetViewSettings && !ok ){
       Lexolights::viewer()->setSceneData( NULL, true );
-   }
+   }*/
 
    // hide message dialog and enable menu
 #if 0 //FIXME: resurrect this
@@ -379,8 +380,8 @@ dtABC::Application *LexoanimMainWindow::getDeltaApp(){
  */
 void LexoanimMainWindow::reloadModel()
 {
-   if( _activeDocument )
-      loadModel( _activeDocument->getFileName(), false );
+   if( LexoanimQtApp::activeDocument() )
+      loadModel( LexoanimQtApp::activeDocument()->getFileName(), false );
 }
 
 /**
@@ -594,7 +595,7 @@ void LexoanimMainWindow::selectCustomColor()
 void LexoanimMainWindow::renderUsingPovray()
 {
    // if no active document, do nothing
-   if( !_activeDocument ) {
+   if( !Lexolights::activeDocument() ) {
       Log::notice() << "No active document. Can not export to POV-Ray." << endl;
       return;
    }
@@ -630,6 +631,7 @@ void LexoanimMainWindow::renderUsingPovray()
    //
    struct ReturnHandler {
       bool restoreGUI;
+      //need to pass main window because I don't want to use Lexolights global object here :)
       LexoanimMainWindow * mainWindow;
       ReturnHandler(LexoanimMainWindow * mw) : restoreGUI( true ), mainWindow(mw)
       {
@@ -667,7 +669,7 @@ void LexoanimMainWindow::renderUsingPovray()
 
    // paths
    osg::Timer time;
-   std::string fileName( osgDB::getNameLessExtension( _activeDocument->getFileName().toLocal8Bit().data() ) );
+   std::string fileName( osgDB::getNameLessExtension( Lexolights::activeDocument()->getFileName().toLocal8Bit().data() ) );
    std::string filePath( osgDB::getFilePath( fileName ) );
    fileName += ".pov";
    std::string simpleFileName( osgDB::getSimpleFileName( fileName ) ); // no path, includes pov extension
@@ -682,23 +684,74 @@ void LexoanimMainWindow::renderUsingPovray()
       pathDir = QString( filePath.c_str() );
    }
 
+   // Do we need to re-export the scene?
+   QString povSceneFile = QDir( pathDir.filePath( "scene.inc" ) ).canonicalPath();
+   bool reexport = true;
+   if( !povSceneFile.isEmpty() )
+   {
+      QSettings settings;
+      settings.beginGroup( "PovrayExport" );
+      QString appBuildTimeStamp = settings.value( "ApplicationBuildTimeStamp" ).toString();
+      if( appBuildTimeStamp == QString( buildDate ) + " " + buildTime )
+      {
+         QString lastInputScene = settings.value( "LastInputScene" ).toString();
+         QString lastOutputScene = settings.value( "LastOutputScene" ).toString();
+         if( !lastInputScene.isEmpty() && !lastOutputScene.isEmpty() &&
+            Lexolights::activeDocument()->getCanonicalName() == lastInputScene &&
+            povSceneFile == lastOutputScene )
+         {
+            FileTimeStamp::getRecord( "povray input scene", Lexolights::activeDocument()->getCanonicalName().toStdString() ) =
+                  FileTimeStamp( settings.value( "LastInputFileTimeStamp" ).toString().toStdString(), Lexolights::activeDocument()->getCanonicalName().toStdString() );
+            FileTimeStamp::getRecord( "povray output scene", povSceneFile.toStdString() ) =
+                  FileTimeStamp( settings.value( "LastOutputFileTimeStamp" ).toString().toStdString(), povSceneFile.toStdString() );
+         }
+         settings.endGroup();
+
+         FileTimeStamp expectedTS = FileTimeStamp::getRecord( "povray input scene", Lexolights::activeDocument()->getCanonicalName().toStdString() );
+         FileTimeStamp currentTS = Lexolights::activeDocument()->getSceneTimeStamp();
+         reexport = expectedTS != currentTS;
+         Log::info() << "Checking Lexolights scene timestamp (file: " << Lexolights::activeDocument()->getCanonicalName() << "):\n"
+                        "   expected timestamp: " << expectedTS.getTimeStampAsString() << "\n"
+                        "   current timestamp: " << currentTS.getTimeStampAsString() << Log::endm;
+         if( reexport == false )
+         {
+            expectedTS = FileTimeStamp::getRecord( "povray output scene", povSceneFile.toStdString() );
+            currentTS = FileTimeStamp( povSceneFile.toStdString() );
+            reexport = expectedTS != currentTS;
+            Log::info() << "Checking POV scene file timestamp (file: " << povSceneFile << "):\n"
+                           "   expected timestamp: " << expectedTS.getTimeStampAsString() << "\n"
+                           "   current timestamp: " << currentTS.getTimeStampAsString() << Log::endm;
+         }
+      }
+   }
+
+   // log messages
+   Log::info() << "Exporting scene to POV-Ray file (" << fileName << ")"
+                  " while placing scene to separate file (scene.inc)..." << Log::endm;
+   if( reexport )
+      Log::info() << "Going to update scene file (scene.inc)." << Log::endm;
+   else
+      Log::info() << "Skipping update of scene file (scene.inc), as it is not required." << Log::endm;
+
    // export scene
-   Log::info() << "Exporting scene to POV-Ray file (" << fileName << ")..." << Log::endm;
+
+   // pov create camera
    osg::ref_ptr< osg::Camera > camera = dynamic_cast< osg::Camera* >(
       getDeltaApp()->GetCamera()->GetOSGCamera()->clone( osg::CopyOp::SHALLOW_COPY ) );
-
-
    camera->removeChild( 0, camera->getNumChildren() );
-   camera->addChild( _activeDocument->getOriginalScene() );
-   osg::ref_ptr< osgDB::Options > options = new osgDB::Options( "CopyFiles" );
-   std::string modelDir = osgDB::getFilePath( _activeDocument->getFileName().toLocal8Bit().data() );
+   camera->addChild( Lexolights::activeDocument()->getOriginalScene() );
+
+// create options
+   ref_ptr< osgDB::Options > options = new osgDB::Options( "CopyFiles SceneFileName=scene.inc" +
+                                                           ( reexport ? string() : " OnlyCameraFile" ) );
+   string modelDir = osgDB::getFilePath( Lexolights::activeDocument()->getFileName().toLocal8Bit().data() );
    if( !modelDir.empty() )
       options->getDatabasePathList().push_back( modelDir );
    else
       Log::warn() << "Render using POV-Ray warning: Can not get model directory." << endl;
-   bool r = osgDB::writeNodeFile( *camera, fileName, options );
 
    //bool r = osgDB::writeNodeFile( *(getDeltaApp()->GetScene()->GetSceneNode()), fileName, options );
+   bool r = osgDB::writeNodeFile( *camera, fileName, options );
    camera = NULL;
    double dt = time.time_m();
    if( r )  Log::notice() << QString( "POV-Ray file %1 successfully written in %2ms" )
@@ -707,7 +760,19 @@ void LexoanimMainWindow::renderUsingPovray()
       Log::fatal() << "Can not export POV-Ray file " << fileName << Log::endm;
       return;
    }
-
+   
+   // update time stamps
+   FileTimeStamp povSceneFileTimeStamp( povSceneFile.toStdString() );
+   FileTimeStamp::getRecord( "povray input scene",  Lexolights::activeDocument()->getCanonicalName().toStdString() ) = Lexolights::activeDocument()->getSceneTimeStamp();
+   FileTimeStamp::getRecord( "povray output scene", povSceneFile.toStdString() ) = povSceneFileTimeStamp;
+   QSettings settings;
+   settings.beginGroup( "PovrayExport" );
+   settings.setValue( "LastInputScene", Lexolights::activeDocument()->getCanonicalName() );
+   settings.setValue( "LastInputFileTimeStamp", Lexolights::activeDocument()->getSceneTimeStamp().getTimeStampAsString().c_str() );
+   settings.setValue( "LastOutputScene", povSceneFile );
+   settings.setValue( "LastOutputFileTimeStamp", povSceneFileTimeStamp.getTimeStampAsString().c_str() );
+   settings.setValue( "ApplicationBuildTimeStamp", QString( buildDate ) + " " + buildTime );
+   settings.endGroup();
 
    //
    //  Write ini file
@@ -756,6 +821,7 @@ void LexoanimMainWindow::renderUsingPovray()
    //
    class PovrayWorker : public ExternalApplicationWorker {
    public:
+      //need the reference to mainwindow even here
       PovrayWorker( const QString& program, const QStringList& arguments,
                     const QString& workingDirectory, const QString& renderedImageFile, LexoanimMainWindow * mw )
          : ExternalApplicationWorker( program, arguments, workingDirectory, true, true ), mainWindow(mw),

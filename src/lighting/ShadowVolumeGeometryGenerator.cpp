@@ -267,7 +267,9 @@ ShadowVolumeGeometryGenerator::ShadowVolumeGeometryGenerator() :
         _faceOredering(FO_AUTO),
         _currentShadowCastingFace(FRONT),
         _currentFaceOredering(CCW)
-{}
+{    
+   _photorealismData.push( std::map< std::string, std::string >() );
+}
 
 ShadowVolumeGeometryGenerator::ShadowVolumeGeometryGenerator( const Vec4& lightPos, Matrix* matrix) :
         NodeVisitor( NodeVisitor::TRAVERSE_ACTIVE_CHILDREN ),
@@ -291,6 +293,8 @@ ShadowVolumeGeometryGenerator::ShadowVolumeGeometryGenerator( const Vec4& lightP
 {
    if( matrix )
       pushMatrix( *matrix );
+
+   _photorealismData.push( std::map< std::string, std::string >() );
 }
 
 ShadowVolumeGeometryGenerator::~ShadowVolumeGeometryGenerator(){
@@ -298,7 +302,13 @@ ShadowVolumeGeometryGenerator::~ShadowVolumeGeometryGenerator(){
    _coords = NULL;
    _normals = NULL;
    _edge_vert = NULL;
-   _edge_col = NULL;      
+   _edge_col = NULL; 
+   if( _photorealismData.size() >= 1) 
+      OSG_NOTICE<< "_photorealismData underflow."<<std::endl ;
+   else if( _photorealismData.size() <= 1)
+      OSG_NOTICE<<"_photorealismData overflow."<<std::endl;
+   else
+      _photorealismData.pop();
 }
 
 void ShadowVolumeGeometryGenerator::setup(const Vec4& lightPos, Matrix* matrix)
@@ -500,7 +510,7 @@ void ShadowVolumeGeometryGenerator::apply( Node& node )
    if(ss)
       setCurrentFacingAndOrdering(ss);
    if( node.getStateSet() )
-      popState();
+      popState(node);
 }
 
 void ShadowVolumeGeometryGenerator::apply( Transform& transform )
@@ -526,7 +536,7 @@ void ShadowVolumeGeometryGenerator::apply( Transform& transform )
    if(ss)
       setCurrentFacingAndOrdering(ss);
    if( transform.getStateSet() )
-      popState();
+      popState(transform);
 }
 
 void ShadowVolumeGeometryGenerator::apply( Geode& geode )
@@ -548,13 +558,13 @@ void ShadowVolumeGeometryGenerator::apply( Geode& geode )
       apply( geode.getDrawable( i ) );
 
       if( drawable->getStateSet() )
-            popState();
+         popState(drawable->getStateSet());
    }
 
    if(ss)
       setCurrentFacingAndOrdering(ss);
    if( geode.getStateSet() )
-      popState();
+      popState(geode);
 }
 
 void ShadowVolumeGeometryGenerator::apply( Drawable* drawable )
@@ -570,6 +580,18 @@ void ShadowVolumeGeometryGenerator::apply( Drawable* drawable )
    //    // ignore transparent drawables
    //    return;
    //}
+
+   std::map< std::string, std::string > &photorealism = _photorealismData.top();
+   std::map< std::string, std::string >:: iterator it = photorealism.find( "Material.castShadow" );
+   if( it != photorealism.end() )
+   {
+      std::stringstream in( it->second );
+      bool castShadow;
+      in >> castShadow;
+      if( !castShadow )
+            // do not process drawables with disabled shadow casting
+            return;
+   }
         
    if(_mode == CPU_RAW){
       TriangleOnlyCollectorFunctor tc( _coords, _matrixStack.empty() ? NULL : &_matrixStack.back(), _lightPos, _currentFaceOredering, _currentShadowCastingFace,  CPU_RAW );
@@ -595,27 +617,85 @@ void ShadowVolumeGeometryGenerator::apply( Drawable* drawable )
 
 }
 
-void ShadowVolumeGeometryGenerator::pushState( StateSet* stateset )
+void ShadowVolumeGeometryGenerator::pushState(const StateSet* stateset, const osg::Node *node )
 {
-   StateAttribute::GLModeValue prevBlendModeValue;
-   if( _blendModeStack.empty() ) prevBlendModeValue = StateAttribute::INHERIT;
-   else prevBlendModeValue = _blendModeStack.back();
-
-   StateAttribute::GLModeValue newBlendModeValue = stateset->getMode( GL_BLEND );
-
-   if( !(newBlendModeValue & StateAttribute::PROTECTED) &&
-      (prevBlendModeValue & StateAttribute::OVERRIDE) )
+   if( stateset )
    {
-      newBlendModeValue = prevBlendModeValue;
+      // get current blend value
+      StateAttribute::GLModeValue prevBlendModeValue;
+      if( _blendModeStack.empty() ) prevBlendModeValue = StateAttribute::INHERIT;
+      else prevBlendModeValue = _blendModeStack.back();
+
+      // get new blend value
+      StateAttribute::GLModeValue newBlendModeValue = stateset->getMode( GL_BLEND );
+
+      if( !(newBlendModeValue & StateAttribute::PROTECTED) &&
+         (prevBlendModeValue & StateAttribute::OVERRIDE) )
+      {
+         newBlendModeValue = prevBlendModeValue;
+      }
+      
+      // push new blend value
+      _blendModeStack.push_back( newBlendModeValue );
    }
+   if( node ) {
 
-   _blendModeStack.push_back( newBlendModeValue );
+            std::string str;
+            node->getUserValue< std::string >( "Photorealism", str );
+
+            if( !str.empty() ) {
+
+                std::map< std::string, std::string > data( _photorealismData.top() );
+
+                std::stringstream in( str );
+                std::string currentKey;
+                std::string currentValue;
+                while( in )
+                {
+                    std::string s;
+                    in >> s;
+                    if( s.empty() )
+                        continue;
+                    char c = s[0];
+                    bool isKey = !(( c >= '0' && c <= '9' ) || c == '.' || c == '"' || c == '\'' );
+                    if( isKey )
+                    {
+                        if( !currentKey.empty() )
+                            data.insert( make_pair( currentKey, currentValue ) );
+                        currentKey = s;
+                        currentValue = "";
+                    }
+                    else
+                    {
+                        if( currentValue.empty() )
+                            currentValue = s;
+                        else
+                            currentValue += ' ' + s;
+                    }
+                }
+                if( !currentKey.empty() )
+                    data.insert( make_pair( currentKey, currentValue ) );
+
+                _photorealismData.push( data );
+
+            }
+        }
 }
 
-void ShadowVolumeGeometryGenerator::popState()
-{
-   _blendModeStack.pop_back();
-}
+void ShadowVolumeGeometryGenerator::popState( const osg::StateSet *ss, const osg::Node *node )
+    {
+        if( ss )
+            _blendModeStack.pop_back();
+
+        if( node )
+        {
+            std::string str;
+            node->getUserValue< std::string >( "Photorealism", str );
+
+            if( !str.empty() )
+                _photorealismData.pop();
+        }
+    }
 
 void ShadowVolumeGeometryGenerator::pushMatrix(Matrix& matrix)
 {

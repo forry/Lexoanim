@@ -20,6 +20,9 @@
 #include <osg/Referenced>
 #include <osg/FrontFace>
 #include <osg/CullFace>
+#include <stack>
+#include <map>
+#include <sstream>
 
 //debug
 #include <osg/io_utils>
@@ -129,9 +132,13 @@ public:
    virtual void apply( Drawable* drawable );
 
 
-   virtual void pushState( StateSet* stateset );
+   inline void pushState( const osg::Node &node )  { pushState( node.getStateSet(), &node ); }
+   inline void popState( const osg::Node &node )  { popState( node.getStateSet(), &node ); }
 
-   inline virtual void popState();
+   virtual void pushState(const StateSet* stateset, const osg::Node *node = NULL );
+
+   inline virtual void popState(const osg::StateSet *ss, const osg::Node *node = NULL);
+   
 
    inline virtual void pushMatrix(Matrix& matrix);
 
@@ -310,6 +317,9 @@ protected:
 
     UIntList                 _silhouetteIndices; //indices of vertices of possible silhouette
     EdgeSet _edgeSet;
+
+    //general data for lexolights with information about what objects casts shadows
+    std::stack< std::map< std::string, std::string > > _photorealismData;
 
 
 };

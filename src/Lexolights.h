@@ -44,6 +44,7 @@ public:
 
    // global functions
    static inline LexolightsDocument* activeDocument()  { return g_activeDocument; }
+   static void setActiveDocument( LexolightsDocument *doc );
    static inline CadworkViewer* viewer()  { return g_viewer; }
    static inline MainWindow* mainWindow()  { return g_mainWindow; }
 

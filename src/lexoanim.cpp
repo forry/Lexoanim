@@ -30,6 +30,11 @@ void LexoanimApp::Config(){
    mCadworkFlyMotionModel->SetEnabled(false);
 
    SetActualCameraMotionModel(mCadworkOrbitMotionModel);
+   osgViewer::View *view = dynamic_cast<osgViewer::View *>(GetCamera()->GetOSGCamera()->getView());
+   if(view)
+   {
+      view->requestContinuousUpdate(false);
+   }
 
    /*mTerrainObject = new dtCore::Object("Model");
    mTerrainObject->LoadFile("F:/grafika/osg/model loading/2011-08-04 Mirror light intensity/mirror.iv");

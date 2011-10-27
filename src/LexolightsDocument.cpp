@@ -26,6 +26,9 @@
 #else
 # include <sys/stat.h>
 # include <sys/types.h>
+# include <sys/fcntl.h> // locking
+# include <unistd.h> // close()
+# define INVALID_HANDLE_VALUE (-1)
 #endif
 #include "LexolightsDocument.h"
 #include "Lexolights.h"
@@ -51,7 +54,8 @@ static bool removeDirRecursively( const std::wstring &dirName );
  */
 LexolightsDocument::LexolightsDocument()
    : _openOpThread( NULL ),
-     _asyncSuccess( false )
+     _asyncSuccess( false ),
+     _openFileDescriptor( INVALID_HANDLE_VALUE )
 {
    _watcher = new QFileSystemWatcher;
    connect( _watcher, SIGNAL( fileChanged( const QString& ) ),
@@ -66,6 +70,15 @@ LexolightsDocument::~LexolightsDocument()
 {
    close();
    delete _watcher;
+   if( _openFileDescriptor != INVALID_HANDLE_VALUE ) {
+      Log::warn() << "LexolightsDocument::~LexolightsDocument: Closing trailig locking file descriptor." << Log::endm;
+#if defined(__WIN32__) || defined(_WIN32)
+      if( CloseHandle( _openFileDescriptor ) == 0 )
+#else
+      if( ::close( _openFileDescriptor ) != 0 )
+#endif
+         Log::warn() << "LexolightsDocument::~LexolightsDocument: Failed to close locking file descriptor." << Log::endm;
+   }
 }
 
 
@@ -123,14 +136,53 @@ bool LexolightsDocument::openFile( const QString &fileName, bool background, boo
    // close previous document (if any)
    close();
 
-   // set file name and watcher
+   // set file name
    _fileName = fileName;
-   if( !fileName.isEmpty() )
-      _watcher->addPath( fileName );
+
+   // return success if empty fileName
+   if( _fileName.isEmpty() )
+      return true;
+
+   // lock the file
+#if defined(__WIN32__) || defined(_WIN32)
+   _openFileDescriptor = CreateFileW( (wchar_t*)_fileName.utf16(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                      NULL, OPEN_EXISTING, 0, NULL );
+   if( _openFileDescriptor == INVALID_HANDLE_VALUE )
+   {
+      Log::warn() << "LexolightsDocument::openFile: Failed to open the file." << Log::endm;
+      return false;
+   }
+#else
+   _openFileDescriptor = open( _fileName.toUtf8().constData(), O_RDONLY );
+   if( _openFileDescriptor == INVALID_HANDLE_VALUE )
+   {
+      Log::warn() << "LexolightsDocument::openFile: Failed to open the file." << Log::endm;
+      return false;
+   }
+   else
+   {
+      //flock( _openFileDescriptor, LOCK_SH | LOCK_NB );
+      struct flock l;
+      l.l_type = F_RDLCK;
+      l.l_whence = SEEK_SET;
+      l.l_start = 0;
+      l.l_len = 0;
+      if( fcntl( _openFileDescriptor, F_SETLK, &l ) != 0 ) {
+         Log::warn() << "LexolightsDocument::openFile: Failed to get read lock for the file." << Log::endm;
+         return false;
+      }
+   }
+#endif
+
+   // set watcher
+   _watcher->addPath( _fileName );
+
+   // get time stamp
+   _sceneTimeStamp.set( _fileName.toStdString() );
 
    // prepare OpenOperation
    ref_ptr< OpenOperation > openOperation = new OpenOperation;
-   openOperation->fileName = fileName;
+   openOperation->fileName = _fileName;
 
    // set variables
    _asyncSuccess = false;
@@ -140,15 +192,30 @@ bool LexolightsDocument::openFile( const QString &fileName, bool background, boo
    // open
    if( background )
    {
+      // create thread
       _openOpThread = new OpenOpThread( this, openOperation );
       _openOpThread->start();
       return true;
    }
    else
    {
+      // run operation
       bool r = openOperation->run();
       _originalScene = openOperation->getOriginalScene();
       _pplScene = openOperation->getPPLScene();
+
+      // close locking file
+      if( _openFileDescriptor != INVALID_HANDLE_VALUE )
+      {
+#if defined(__WIN32__) || defined(_WIN32)
+         if( CloseHandle( _openFileDescriptor ) == 0 )
+#else
+         if( ::close( _openFileDescriptor ) != 0 )
+#endif
+            Log::warn() << "LexolightsDocument::openFile: Failed to close locking file descriptor." << Log::endm;
+         _openFileDescriptor = INVALID_HANDLE_VALUE;
+      }
+
       return r;
    }
 }
@@ -598,6 +665,20 @@ void LexolightsDocument::OpenOpThread::run()
    Log::info() << "OpenOpThread: Open task finished." << Log::endm;
    Log::notice() << "Background loading thread for file " << _openOp->fileName << " finished in " << t.time_m() << "ms." << Log::endm;
 
+   // close locking file
+   LexolightsDocument *doc = dynamic_cast< LexolightsDocument* >( parent() );
+   if( doc->_openFileDescriptor != INVALID_HANDLE_VALUE )
+   {
+#if defined(__WIN32__) || defined(_WIN32)
+      if( CloseHandle( doc->_openFileDescriptor ) == 0 )
+#else
+      if( ::close( doc->_openFileDescriptor ) != 0 )
+#endif
+         Log::warn() << "LexolightsDocument::OpenOperation: Failed to close locking file descriptor." << Log::endm;
+      doc->_openFileDescriptor = INVALID_HANDLE_VALUE;
+   }
+
+   // send open completed event
    QEvent *event = new QEvent( (QEvent::Type)asyncOpenCompletedEventId );
    QCoreApplication::postEvent( this, event );
 }
@@ -760,4 +841,32 @@ static bool removeDirRecursively( const std::wstring &dirName )
             << dirName.c_str() << "'." << std::endl;
 #endif
    return false;
+}
+
+
+QString LexolightsDocument::getStrippedName() const
+{
+   // return only name (no path, no extension)
+   return QString::fromStdString( osgDB::getStrippedName( _fileName.toUtf8().constData() ) );
+}
+
+
+QString LexolightsDocument::getSimpleName() const
+{
+   // name + extension (no path)
+   return QString::fromStdString( osgDB::getSimpleFileName( _fileName.toUtf8().constData() ) );
+}
+
+
+QString LexolightsDocument::getAbsoluteName() const
+{
+   // pathPossiblyWithLinks + name + extension
+   return QDir( _fileName ).absolutePath();
+}
+
+
+QString LexolightsDocument::getCanonicalName() const
+{
+   // pathWithoutLinks + name + extension
+   return QDir( _fileName ).canonicalPath();
 }

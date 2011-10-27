@@ -9,7 +9,7 @@ set( LEXOLIGHTS_VERSION_MINOR 1a )
 
 # OSG SOVERSIONS (used for Windows packaging)
 set( OPENSCENEGRAPH_VERSION 3.1.0 )
-set( OPENSCENEGRAPH_SOVERSION 78 )
+set( OPENSCENEGRAPH_SOVERSION 90 )
 set( OPENTHREADS_SOVERSION 12 )
 
 # Coin version, FIXME: need to be detected

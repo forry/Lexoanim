@@ -1,10 +1,12 @@
 project( "Lexolights" )
 
 include_directories( ${OSG_INCLUDE_DIR};${ZLIB_INCLUDE_DIRS};${PROJECT_SOURCE_DIR};
-                     ${PROJECT_SOURCE_DIR}/utils )
+                     ${PROJECT_SOURCE_DIR}/utils;${PROJECT_BINARY_DIR} )
 
 add_definitions( -DLEXOLIGHTS_VERSION_MAJOR="${LEXOLIGHTS_VERSION_MAJOR}"
                  -DLEXOLIGHTS_VERSION_MINOR="${LEXOLIGHTS_VERSION_MINOR}" )
+
+QT4_WRAP_UI( UI_HDR gui/AboutDialog.ui gui/SystemInfoDialog.ui )
 
 QT4_WRAP_CPP( HDR_MOCCED
               Lexolights.h
@@ -35,6 +37,7 @@ endif( WIN32 )
 add_executable( lexolights WIN32
                 main.cpp
                 ${HDR_MOCCED}
+                ${UI_HDR}
                 ${RES_FILES}
                 Lexolights.h Lexolights.cpp
 				LexoanimQtApp.h LexoanimQtApp.cpp
@@ -49,6 +52,9 @@ add_executable( lexolights WIN32
                 gui/CentralContainer.h gui/CentralContainer.cpp
                 gui/CadworkOrbitManipulator.h gui/CadworkOrbitManipulator.cpp
                 gui/CadworkFirstPersonManipulator.h gui/CadworkFirstPersonManipulator.cpp
+                gui/AboutDialog.h gui/AboutDialog.cpp
+                gui/SceneInfoDialog.h gui/SceneInfoDialog.cpp
+                gui/SystemInfoDialog.h gui/SystemInfoDialog.cpp
                 lighting/PerPixelLighting.h
                 lighting/PerPixelLighting.cpp
                 lighting/ShadowVolume.h
@@ -66,13 +72,28 @@ add_executable( lexolights WIN32
                 utils/SetAnisotropicFilteringVisitor.h utils/SetAnisotropicFilteringVisitor.cpp
                 utils/TextureUnitsUsageVisitor.h utils/TextureUnitsUsageVisitor.cpp
                 utils/TextureUnitMoverVisitor.h utils/TextureUnitMoverVisitor.cpp
+                utils/FileTimeStamp.h utils/FileTimeStamp.cpp
                 utils/SysInfo.h utils/SysInfo.cpp
                 utils/ViewLoadSave.h utils/ViewLoadSave.cpp
                 utils/WinRegistry.h utils/WinRegistry.cpp
                 utils/minizip/unzip.h utils/minizip/unzip.c
                 utils/minizip/ioapi.h utils/minizip/ioapi.c
                 utils/minizip/crypt.h
+                utils/BuildTime.cpp
                 )
+
+set_source_files_properties( utils/BuildTime.cpp PROPERTIES GENERATED TRUE )
+if( WIN32 )
+file( TO_NATIVE_PATH ${PROJECT_SOURCE_DIR}/utils/BuildTime.cpp VERSION_SRC_PATH )
+file( TO_NATIVE_PATH ${PROJECT_BINARY_DIR}/utils/BuildTime.cpp VERSION_DEST_PATH )
+file( TO_NATIVE_PATH ${PROJECT_BINARY_DIR}/utils/ VERSION_DEST_DIR )
+add_custom_target( updateVersion COMMAND xcopy /Y /Q ${VERSION_SRC_PATH} ${VERSION_DEST_DIR}
+                                 COMMAND type ${VERSION_SRC_PATH} > ${VERSION_DEST_PATH} )
+else( WIN32 )
+add_custom_target( updateVersion COMMAND mkdir -p ${PROJECT_BINARY_DIR}/utils/
+                                 COMMAND cp ${PROJECT_SOURCE_DIR}/utils/BuildTime.cpp ${PROJECT_BINARY_DIR}/utils/BuildTime.cpp )
+endif( WIN32 )
+add_dependencies( lexolights updateVersion )
 
 if( WIN32 )
 set( EXTRA_LIBS opengl32 )

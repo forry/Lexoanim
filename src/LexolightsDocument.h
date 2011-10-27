@@ -12,6 +12,7 @@
 #include <osg/ref_ptr>
 #include <QString>
 #include <QThread>
+#include "utils/FileTimeStamp.h"
 
 class QFileSystemWatcher;
 namespace osg {
@@ -47,7 +48,13 @@ public:
    inline osg::Node* getOriginalScene();
    inline osg::Node* getPPLScene();
 
-   inline const QString& getFileName() const;
+   inline const QString& getFileName() const;  // as it was given to openFile()
+   QString getStrippedName() const;   // only name
+   QString getSimpleName() const;     // name + extension
+   QString getAbsoluteName() const;   // pathPossiblyWithLinks + name + extension
+   QString getCanonicalName() const;  // pathWithoutLinks + name + extension
+
+   inline FileTimeStamp getSceneTimeStamp() const;
 
 signals:
 
@@ -92,10 +99,17 @@ protected:
    bool _openInMainWindow;
    bool _resetViewSettings;
    QFileSystemWatcher *_watcher;
+#if defined(__WIN32__) || defined(_WIN32)
+   void* _openFileDescriptor;
+#else
+   int _openFileDescriptor;
+#endif
    OpenOpThread *_openOpThread;
 
    osg::ref_ptr< osg::Node > _originalScene;
    osg::ref_ptr< osg::Node > _pplScene;
+
+   FileTimeStamp _sceneTimeStamp;
 
 private slots:
 
@@ -113,6 +127,7 @@ inline osg::Node* LexolightsDocument::OpenOperation::getOriginalScene() const  {
 inline osg::Node* LexolightsDocument::OpenOperation::getPPLScene() const  { return _pplScene; }
 inline bool LexolightsDocument::OpenOperation::getSuccess() const  { return _success; }
 inline LexolightsDocument::OpenOperation* LexolightsDocument::OpenOpThread::getOpenOperation() const  { return _openOp; }
+inline FileTimeStamp LexolightsDocument::getSceneTimeStamp() const  { return _sceneTimeStamp; }
 
 
 #endif /* LEXOLIGHTS_DOCUMENT_H */

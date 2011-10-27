@@ -51,6 +51,7 @@ int main(int argc, char* argv[])
    Log::startMsg();
 
    // set encoding of char* based strings used by the application
+   // including QString::fromAscii() and QString::fromStdString() functions
    QTextCodec::setCodecForCStrings( QTextCodec::codecForName( "UTF-8" ) );
 
    // Application object

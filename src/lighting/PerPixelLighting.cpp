@@ -253,8 +253,8 @@ void PerPixelLighting::convert( Node *scene, ShadowTechnique shadowTechnique )
                      if( passNum <=2 )
                         sv->setClearStencil( false ); // stencil is cleared on the beginning of the frame
                      sv->setMethod( osgShadow::ShadowVolumeGeometryGenerator::ZFAIL );
-                     sv->setMode(osgShadow::ShadowVolumeGeometryGenerator::SILHOUETTES_ONLY);
-                     sv->setStencilImplementation( osgShadow::ShadowVolume::STENCIL_TWO_SIDED );
+                     sv->setMode(osgShadow::ShadowVolumeGeometryGenerator::CPU_RAW);
+                     sv->setStencilImplementation( osgShadow::ShadowVolume::STENCIL_AUTO );
                      sv->setShadowCastingFace( osgShadow::ShadowVolumeGeometryGenerator::BACK );
                      //sv->setFaceOrdering(osgShadow::ShadowVolumeGeometryGenerator::CW);
                      sv->setUpdateStrategy( osgShadow::ShadowVolume::MANUAL_INVALIDATE );
@@ -1300,7 +1300,7 @@ static void createFragmentShaderLightingCode( stringstream &fs,
       if( !compatibilityParams ) {
 
          fs << "vec4 processLight( const gl_LightSourceParameters lightSource," << endl;
-         fs << "                   vec3 v, vec3 n, bool twoSidedLighting )" << endl;
+         fs << "                   vec3 v, vec3 n )" << endl;
 
       } else {
 
@@ -1310,7 +1310,7 @@ static void createFragmentShaderLightingCode( stringstream &fs,
          fs << "                   float ls_spotCosInnerAngle," << endl;
          fs << "                   float ls_constantAttenuation, float ls_linearAttenuation, " << endl;
          fs << "                   float ls_quadraticAttenuation, " << endl;
-         fs << "                   vec3 v, vec3 n, bool twoSidedLighting )" << endl;
+         fs << "                   vec3 v, vec3 n )" << endl;
 
          // note: Old drivers does not accept gl_LightSourceParameters type as a parameter.
          //       It was necessary to split it to its components (ambient, diffuse, ...)
@@ -1362,14 +1362,13 @@ static void createFragmentShaderLightingCode( stringstream &fs,
    fs << "   " << (makeFunction ? "vec4 " : "") << destVar
       << " = vec4( 0. );" << endl;
 
+   // revert normal on back facing triangles
+   fs << "   if( gl_FrontFacing == false )" << endl;
+   fs << "         n = -n;" << endl;
+   fs << endl;
+
    // Diffuse component: Lambertian reflection
    fs << "   float lambertTerm = dot( n, l );" << endl;
-   fs << endl;
-   fs << "   if( twoSidedLighting )" << endl;
-   fs << "      if( lambertTerm < 0. ) {" << endl;
-   fs << "         n = -n;" << endl;
-   fs << "         lambertTerm = dot( n, l );" << endl;
-   fs << "      }" << endl;
    fs << endl;
    fs << "   if( lambertTerm > 0. ) {" << endl;
    fs << endl;
@@ -1603,7 +1602,7 @@ static void createFragmentShaderBody( stringstream &fs,
             << "          gl_LightSource[" << i << "].constantAttenuation," << endl
             << "          gl_LightSource[" << i << "].linearAttenuation," << endl
             << "          gl_LightSource[" << i << "].quadraticAttenuation," << endl
-            << "          v, n, false ).rgb";
+            << "          v, n ).rgb";
 
       // apply shadow
       if( !shadowTexture.empty() )

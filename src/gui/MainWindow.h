@@ -52,9 +52,6 @@ public:
    // create GUI
    virtual void buildGUI( bool buildGLWidget = true );
 
-   // active LexolightsDocument
-   inline LexolightsDocument* getActiveDocument();
-
    // QGLWidgets
    inline const QGLWidget* getGLWidget() const;
    inline QGLWidget* getGLWidget();
@@ -87,12 +84,6 @@ protected:
 
    // a widget for text or image (used, for example, by POV-Ray)
    QLabel *_imageWidget;
-
-   // scene data
-   osg::ref_ptr< LexolightsDocument > _activeDocument;
-
-   // show more buttons and menu options
-   bool _showAdvancedGUI;
 
    // custom background color
    osg::Vec4 _customColor;
@@ -165,6 +156,8 @@ protected:
    // Help actions
    QAction* actionShowLog;          // show log
    QAction* actionAbout;            // show about dialog
+   QAction* actionShowSceneInfo;    // show scene details
+   QAction* actionShowSystemInfo;   // show system details
 
    // Top toolbar
    QAction* actionDefaultView;      // axonometric default view
@@ -180,6 +173,7 @@ protected:
    // PRIVATE METHODS
    //
    // create GUI elements
+   void createOSGWindow();
    void createActions();
    void createMenu();
    void createToolbars();
@@ -206,6 +200,8 @@ public slots:
    virtual void renderUsingPovray();
    void setStereoscopicRendering( bool on );
    void showAboutDlg();
+   void showSceneInfo();
+   void showSystemInfo();
    void showLog( bool visible );
 
 public:
@@ -224,7 +220,6 @@ protected:
 //  inline functions
 //
 
-inline LexolightsDocument* MainWindow::getActiveDocument()  { return _activeDocument; }
 inline const QGLWidget* MainWindow::getGLWidget() const  { return _glWidget; }
 inline QGLWidget* MainWindow::getGLWidget()  { return _glWidget; }
 inline QGLWidget* MainWindow::getGLStereoWidget()  { return _glStereoWidget; }
